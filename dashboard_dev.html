@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<!--
+═══════════════════════════════════════════════════════════════════════
+  DASHBOARD · PROGRAMA CORAÇÃO DE HERÓI · CBMERJ
+  Lê os dados do Google Sheets via doGet do Apps Script.
+  1. Cole a URL /exec do seu Apps Script no campo "URL da fonte de dados"
+     (ou na constante SCRIPT_URL abaixo) e clique em Atualizar.
+  2. Sem URL, o painel exibe DADOS DE DEMONSTRAÇÃO para visualização.
+═══════════════════════════════════════════════════════════════════════
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEV | Dashboard | Coração de Herói | CBMERJ</title>
+<style>
+  :root{
+    --vermelho-cbmerj:#C41E1E;--vinho:#8B1A1A;--vinho-escuro:#5E0F0F;
+    --dourado:#D4A017;--dourado-claro:#E8C468;--preto:#1A1A1A;
+    --off-white:#FAF7F2;--cinza-texto:#3A3A3A;--cinza-suave:#6B6B6B;
+    --azul-prem:#1A4E8B;--verde:#2E7D32;--amarelo:#E0A400;--vermelho-alerta:#C0392B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;background:var(--off-white);color:var(--cinza-texto);line-height:1.55;}
+  .faixa-topo{background:linear-gradient(90deg,var(--preto),var(--vermelho-cbmerj),var(--preto));height:8px;}
+  .faixa-dourada{background:linear-gradient(90deg,var(--dourado),var(--dourado-claro),var(--dourado));height:3px;}
+
+  header{background:linear-gradient(135deg,var(--vinho-escuro) 0%,var(--vinho) 45%,var(--vermelho-cbmerj) 100%);color:#fff;padding:22px 20px;position:relative;overflow:hidden;}
+  header::before{content:'';position:absolute;right:-90px;top:-90px;width:340px;height:340px;border:2px solid rgba(212,160,23,.2);border-radius:50%;}
+  .header-conteudo{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:18px;position:relative;z-index:1;flex-wrap:wrap;}
+  .header-textos .instituicao{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dourado-claro);font-weight:600;}
+  .header-textos h1{font-size:1.5rem;font-weight:800;}
+  .header-textos h1 span{color:var(--dourado-claro);}
+  .header-textos .sub{font-size:.82rem;color:rgba(255,255,255,.85);}
+
+  .controles{max-width:1180px;margin:16px auto 0;padding:0 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .controles input{flex:1;min-width:240px;padding:10px 12px;border:2px solid #E4D9C8;border-radius:10px;font-size:.85rem;background:#fff;}
+  .controles button{padding:10px 18px;background:var(--vinho);color:#fff;border:2px solid var(--dourado);border-radius:10px;font-weight:700;cursor:pointer;font-size:.85rem;}
+  .controles button:hover{background:var(--vermelho-cbmerj);}
+  .controles select{padding:10px 12px;border:2px solid #E4D9C8;border-radius:10px;font-size:.85rem;background:#fff;font-weight:600;color:var(--vinho-escuro);}
+  .status{font-size:.75rem;color:var(--cinza-suave);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px;}
+  .kpi{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 14px rgba(94,15,15,.1);border-top:4px solid var(--dourado);}
+  .kpi .rot{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--cinza-suave);font-weight:600;display:flex;align-items:center;gap:6px;}
+  .kpi .val{font-size:2rem;font-weight:800;color:var(--vinho);line-height:1.1;margin-top:4px;}
+  .kpi .delta{font-size:.75rem;font-weight:700;margin-top:2px;}
+  .kpi .up{color:var(--verde);}.kpi .down{color:var(--vermelho-alerta);}
+  .kpi.nps .val{color:var(--dourado);}
+  .kpi .barra-meta{height:6px;background:#Eee3d2;border-radius:99px;margin-top:8px;overflow:hidden;}
+  .kpi .barra-meta > div{height:100%;background:linear-gradient(90deg,var(--vinho),var(--dourado));border-radius:99px;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media(max-width:880px){.grid{grid-template-columns:1fr;}}
+  .card{background:#fff;border-radius:16px;padding:22px;box-shadow:0 4px 14px rgba(94,15,15,.08);border-top:5px solid var(--vinho);margin-bottom:18px;}
+  .card.azul{border-top-color:var(--azul-prem);}
+  .card.ouro{border-top-color:var(--dourado);}
+  .card h3{color:var(--vinho-escuro);font-size:1.02rem;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+  .card .card-sub{font-size:.76rem;color:var(--cinza-suave);margin-bottom:16px;}
+  .card.azul h3{color:var(--azul-prem);}
+
+  .legenda-marcos{display:flex;gap:16px;flex-wrap:wrap;font-size:.75rem;margin-bottom:10px;}
+  .legenda-marcos span{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--cinza-texto);}
+  .dot{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  .d90{background:#C9A24B;}.d180{background:var(--vermelho-cbmerj);}.d270{background:var(--vinho-escuro);}
+
+  /* Barras PROM */
+  .prom-item{margin-bottom:14px;}
+  .prom-item .nome{font-size:.82rem;font-weight:600;color:var(--cinza-texto);margin-bottom:5px;display:flex;justify-content:space-between;}
+  .prom-item .nome .melhora{font-size:.72rem;font-weight:700;}
+  .barras3{display:flex;flex-direction:column;gap:3px;}
+  .barra-linha{display:flex;align-items:center;gap:8px;}
+  .barra-linha .tag{font-size:.64rem;color:var(--cinza-suave);width:34px;font-weight:700;}
+  .barra-linha .track{flex:1;height:16px;background:#F1E9DC;border-radius:99px;overflow:hidden;}
+  .barra-linha .fill{height:100%;border-radius:99px;transition:width .6s;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;color:#fff;font-size:.62rem;font-weight:700;}
+  .fill90{background:#C9A24B;}.fill180{background:var(--vermelho-cbmerj);}.fill270{background:var(--vinho-escuro);}
+
+  /* Gauge NPS */
+  .nps-wrap{display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;}
+  .nps-numero{font-size:3.4rem;font-weight:800;color:var(--dourado);line-height:1;}
+  .nps-faixa{font-size:.8rem;font-weight:700;padding:4px 12px;border-radius:99px;display:inline-block;margin-top:6px;}
+  .nps-barras{flex:1;min-width:200px;}
+  .nps-b{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.78rem;}
+  .nps-b .lab{width:80px;font-weight:600;}
+  .nps-b .tr{flex:1;height:20px;background:#F1E9DC;border-radius:99px;overflow:hidden;}
+  .nps-b .fl{height:100%;border-radius:99px;color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;padding-left:8px;}
+
+  /* Tabela busca ativa */
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  th{background:var(--vinho);color:#fff;padding:9px 10px;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;}
+  th:first-child{border-radius:8px 0 0 0;}th:last-child{border-radius:0 8px 0 0;}
+  td{padding:9px 10px;border-bottom:1px solid #EFE6D8;}
+  tr:hover td{background:#FBF6EE;}
+  .badge{padding:2px 9px;border-radius:99px;font-size:.68rem;font-weight:700;color:#fff;}
+  .b-alto{background:var(--vermelho-alerta);}.b-medio{background:var(--amarelo);}.b-baixo{background:var(--verde);}
+
+  .radar-svg{width:100%;max-width:420px;margin:0 auto;display:block;}
+
+  footer{background:var(--vinho-escuro);color:rgba(255,255,255,.85);padding:22px;text-align:center;font-size:.8rem;}
+  footer .ld{width:70px;height:3px;background:var(--dourado);margin:0 auto 12px;border-radius:2px;}
+  footer strong{color:var(--dourado-claro);}
+  .demo-tag{display:inline-block;background:var(--amarelo);color:#4a3800;font-size:.68rem;font-weight:800;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;}
+  .dev-tag{display:inline-block;background:#F4C542;color:#4a3800;font-size:.68rem;font-weight:900;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;margin-left:8px;}
+</style>
+</head>
+<body>
+<div class="faixa-topo"></div>
+<div class="faixa-dourada"></div>
+
+<header>
+  <div class="header-conteudo">
+    <!-- Brasão CBMERJ compacto -->
+    <svg width="64" height="64" viewBox="0 0 200 200" aria-label="CBMERJ">
+      <defs><radialGradient id="mCB" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#F0F0F2"/><stop offset="55%" stop-color="#D6D6DA"/><stop offset="100%" stop-color="#AFAFB6"/></radialGradient></defs>
+      <circle cx="100" cy="100" r="99" fill="#111"/><circle cx="100" cy="100" r="90" fill="#C21E1E"/>
+      <circle cx="100" cy="100" r="63" fill="url(#mCB)" stroke="#111" stroke-width="2"/>
+      <g transform="translate(100,108)">
+        <g stroke="url(#mCB)" stroke-width="5.5" stroke-linecap="round"><line x1="-32" y1="-26" x2="26" y2="26"/><line x1="32" y1="-26" x2="-26" y2="26"/></g>
+        <path d="M -25,-30 L 25,-30 L 25,4 C 25,22 12,32 0,38 C -12,32 -25,22 -25,4 Z" fill="#C21E1E" stroke="url(#mCB)" stroke-width="3"/>
+        <path d="M 0,-19 L 4.6,-6.3 L 18,-6.3 L 7.2,1.5 L 11.3,14.3 L 0,6.6 L -11.3,14.3 L -7.2,1.5 L -18,-6.3 L -4.6,-6.3 Z" fill="#D4A017"/>
+        <g transform="translate(0,-52)"><rect x="-4.5" y="0" width="9" height="16" fill="url(#mCB)"/><rect x="-7" y="-3" width="14" height="6" rx="1.5" fill="#D4A017"/><path d="M 0,-30 C -7,-22 -6,-15 -8,-8 C -8,-2 -3,2 0,2 C 3,2 8,-2 8,-8 C 6,-15 7,-22 0,-30 Z" fill="#E8432E"/></g>
+      </g>
+    </svg>
+    <div class="header-textos">
+      <div class="instituicao">CBMERJ · Diretoria Geral de Saúde · 1ª Policlínica – Campinho</div>
+      <h1>Dashboard <span>Coração de Herói</span></h1>
+      <div class="sub">Painel VBHC · Desfechos (PROMs) · Experiência (PREMs) · NPS <span class="dev-tag">DEV / Homologação</span> <span id="demoTag"></span></div>
+    </div>
+  </div>
+</header>
+
+<div class="controles">
+  <input id="urlFonte" placeholder="URL da fonte de dados DEV já configurada — deixe vazio para usar a constante SCRIPT_URL">
+  <select id="filtroMarco">
+    <option value="todos">Todos os marcos</option>
+    <option value="90 dias">90 dias</option>
+    <option value="180 dias">180 dias</option>
+    <option value="270 dias">270 dias</option>
+  </select>
+  <button onclick="carregar()">Atualizar</button>
+  <span class="status" id="statusMsg"></span>
+</div>
+
+<div class="wrap">
+
+  <!-- KPIs -->
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <!-- PROMs -->
+    <div class="card">
+      <h3>❤️ Evolução dos PROMs por marco</h3>
+      <div class="card-sub">Percentual de respostas favoráveis em cada domínio · comparação 90 → 180 → 270 dias</div>
+      <div class="legenda-marcos">
+        <span><i class="dot d90"></i>90 dias</span>
+        <span><i class="dot d180"></i>180 dias</span>
+        <span><i class="dot d270"></i>270 dias</span>
+      </div>
+      <div id="promContainer"></div>
+    </div>
+
+    <!-- PREMs radar -->
+    <div class="card azul">
+      <h3>🤝 Experiência do paciente (PREMs)</h3>
+      <div class="card-sub">Índice médio por dimensão (0–100) · agregado do período filtrado</div>
+      <svg class="radar-svg" id="radarPrem" viewBox="0 0 400 340"></svg>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- NPS -->
+    <div class="card ouro">
+      <h3>⭐ Net Promoter Score (NPS)</h3>
+      <div class="card-sub">NPS = % Promotores − % Detratores</div>
+      <div class="nps-wrap">
+        <div style="text-align:center">
+          <div class="nps-numero" id="npsNum">—</div>
+          <div class="nps-faixa" id="npsFaixa">—</div>
+        </div>
+        <div class="nps-barras" id="npsBarras"></div>
+      </div>
+    </div>
+
+    <!-- Adesão / participação -->
+    <div class="card">
+      <h3>📊 Participação por marco</h3>
+      <div class="card-sub">Respostas recebidas vs. militares elegíveis em cada janela</div>
+      <div id="participacao"></div>
+    </div>
+  </div>
+
+  <!-- Busca ativa -->
+  <div class="card">
+    <h3>🚨 Busca ativa — militares com piora de desfechos</h3>
+    <div class="card-sub">Priorização para contato: sintomas frequentes, baixa aptidão, baixa adesão ou saúde autopercebida ≤ 4</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>RG</th><th>Marco</th><th>Saúde (0–10)</th><th>Sintomas</th><th>Aptidão</th><th>Adesão</th><th>Prioridade</th></tr></thead>
+        <tbody id="tabelaBusca"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="ld"></div>
+  <strong>PROGRAMA CORAÇÃO DE HERÓI</strong> · Painel VBHC<br>
+  1ª Policlínica – Campinho · DGS · CBMERJ · Direção: Cel BM Ricardo de Souza Carvalho
+</footer>
+
+<script>
+/* ═══ Cole aqui a URL /exec do Apps Script (opcional; o campo no topo tem prioridade) ═══ */
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2kAbIU8QMkfJ_xchfl8NAf0mWrCbMoy_ifNjwoDB4zpj2e_UsL3_k1D_eDY4vsu4j/exec';
+
+const META_INSPECOES = 1000;
+
+/* ---------- DADOS DE DEMONSTRAÇÃO ---------- */
+function gerarDemo(){
+  const marcos=['90 dias','180 dias','270 dias'];
+  const freq=['Nunca','Raramente','Algumas vezes','Frequentemente'];
+  const apt=['Totalmente apto','Apto com limitações leves','Apto com limitações importantes','Não me sinto apto'];
+  const ades=['Nunca / tomo corretamente','Raramente','Algumas vezes','Frequentemente','Não uso medicação'];
+  const rows=[];
+  let id=20000;
+  marcos.forEach((m,mi)=>{
+    const n=[42,34,26][mi]; // participação decrescente
+    for(let i=0;i<n;i++){
+      const base=5+mi*1.4; // melhora ao longo dos marcos
+      const saude=Math.max(0,Math.min(10,Math.round(base+ (Math.random()*4-2))));
+      const symBias=Math.max(0,2-mi); // menos sintomas nos marcos finais
+      rows.push({
+        rg_cbmerj:(id++).toString(),
+        marco_programa:m,
+        prom_saude_geral:saude,
+        prom_evolucao_percebida: mi===0?'Igual':(Math.random()<.6?'Um pouco melhor':'Muito melhor'),
+        prom_dor_toracica:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
+        prom_dispneia:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
+        prom_palpitacoes:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
+        prom_aptidao_funcional:apt[Math.min(3,Math.floor(Math.random()*(3-mi>0?3-mi:1)+ (Math.random()<.15?1:0)))],
+        prom_adesao_medicacao:ades[Math.floor(Math.random()*(mi<1?4:3))],
+        prom_mudanca_habitos:['Mudei bastante','Mudei um pouco','Tentei, mas não mantive','Não mudei'][Math.floor(Math.random()*(mi>0?2:4))],
+        prem_agendamento:['Muito fácil','Fácil','Difícil'][Math.floor(Math.random()*3)],
+        prem_clareza_informacao:['Sempre','Na maioria das vezes','Às vezes'][Math.floor(Math.random()*2)],
+        prem_decisao_compartilhada:['Sempre','Na maioria das vezes','Às vezes'][Math.floor(Math.random()*2)],
+        prem_respeito:['Sempre','Na maioria das vezes'][Math.floor(Math.random()*2)],
+        prem_coordenacao_cuidado:['Muito bem integrada','Bem integrada','Pouco integrada'][Math.floor(Math.random()*2)],
+        prem_tempo_consulta:['Sempre suficiente','Quase sempre','Às vezes insuficiente'][Math.floor(Math.random()*2)],
+        nps_recomendacao: Math.max(0,Math.min(10,Math.round(7+mi*0.8+(Math.random()*4-2)))),
+      });
+    }
+  });
+  rows.forEach(r=>{ r.nps_classificacao = r.nps_recomendacao>=9?'Promotor':(r.nps_recomendacao>=7?'Neutro':'Detrator'); });
+  return rows;
+}
+
+let DADOS=[];
+
+function jsonp(url, params){
+  return new Promise((resolve,reject)=>{
+    const callback='dash_cb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    const sep=url.includes('?')?'&':'?';
+    const query=new URLSearchParams({...params, callback}).toString();
+    const script=document.createElement('script');
+    const timer=setTimeout(()=>{ cleanup(); reject(new Error('Tempo esgotado ao carregar dados.')); },15000);
+    function cleanup(){ clearTimeout(timer); delete window[callback]; script.remove(); }
+    window[callback]=(data)=>{ cleanup(); resolve(data); };
+    script.onerror=()=>{ cleanup(); reject(new Error('Falha ao carregar dados via JSONP.')); };
+    script.src=url+sep+query;
+    document.body.appendChild(script);
+  });
+}
+
+/* ---------- CARREGAMENTO ---------- */
+async function carregar(){
+  const url=(document.getElementById('urlFonte').value||SCRIPT_URL).trim();
+  const status=document.getElementById('statusMsg');
+  const demoTag=document.getElementById('demoTag');
+  if(!url){
+    DADOS=gerarDemo();
+    demoTag.innerHTML='<span class="demo-tag">Dados de demonstração</span>';
+    status.textContent='Exibindo dados fictícios. Cole a URL do Apps Script para dados reais.';
+    render();
+    return;
+  }
+  status.textContent='Carregando…'; demoTag.innerHTML='';
+  try{
+    const raw=await jsonp(url, {});
+    if(!Array.isArray(raw) || raw.length===0){
+      DADOS=[];
+      status.textContent='Fonte conectada, mas a planilha ainda não tem respostas.';
+      render();
+      return;
+    }
+    const head=raw[0];
+    DADOS=raw.slice(1).map(linha=>{ const o={}; head.forEach((h,i)=>o[h]=linha[i]); return o; });
+    status.textContent=DADOS.length+' respostas carregadas · '+new Date().toLocaleString('pt-BR');
+    render();
+  }catch(err){
+    status.textContent='Falha ao carregar. Reimplante o Apps Script e confirme acesso como Qualquer pessoa.';
+  }
+}
+
+/* ---------- UTILIDADES ---------- */
+function filtrar(){
+  const f=document.getElementById('filtroMarco').value;
+  return f==='todos'?DADOS:DADOS.filter(r=>r.marco_programa===f);
+}
+function pct(arr,cond){ if(!arr.length)return 0; return Math.round(arr.filter(cond).length/arr.length*100); }
+function media(arr,campo){ if(!arr.length)return 0; return (arr.reduce((s,r)=>s+(parseFloat(r[campo])||0),0)/arr.length); }
+
+/* ---------- RENDER ---------- */
+function render(){
+  const dados=filtrar();
+  renderKPIs(dados);
+  renderPROMs();
+  renderRadar(dados);
+  renderNPS(dados);
+  renderParticipacao();
+  renderBusca(dados);
+}
+
+function renderKPIs(d){
+  const saudeMedia=media(d,'prom_saude_geral').toFixed(1);
+  const aptos=pct(d,r=>r.prom_aptidao_funcional==='Totalmente apto');
+  const melhora=pct(d,r=>/melhor/i.test(r.prom_evolucao_percebida||''));
+  const nps=calcNPS(d);
+  const total=DADOS.length;
+  const metaPct=Math.min(100,Math.round(total/META_INSPECOES*100));
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi"><div class="rot">👥 Respostas totais</div><div class="val">${total}</div>
+      <div class="barra-meta"><div style="width:${metaPct}%"></div></div>
+      <div class="delta">${metaPct}% da meta de ${META_INSPECOES}</div></div>
+    <div class="kpi"><div class="rot">🩺 Saúde autopercebida</div><div class="val">${saudeMedia}</div><div class="delta">média 0–10 · filtro atual</div></div>
+    <div class="kpi"><div class="rot">🚒 Totalmente aptos</div><div class="val">${aptos}%</div><div class="delta">função operacional plena</div></div>
+    <div class="kpi"><div class="rot">📈 Relatam melhora</div><div class="val">${melhora}%</div><div class="delta">vs. ingresso no programa</div></div>
+    <div class="kpi nps"><div class="rot">⭐ NPS</div><div class="val">${nps>0?'+':''}${nps}</div><div class="delta">${faixaNPS(nps)}</div></div>`;
+}
+
+/* PROMs: % favorável por domínio, nos 3 marcos */
+const PROM_DOMINIOS=[
+  {nome:'😊 Saúde geral ≥ 7',fn:r=>parseFloat(r.prom_saude_geral)>=7},
+  {nome:'💢 Sem dor torácica',fn:r=>r.prom_dor_toracica==='Nunca'},
+  {nome:'💨 Sem dispneia',fn:r=>r.prom_dispneia==='Nunca'},
+  {nome:'💓 Sem palpitações',fn:r=>r.prom_palpitacoes==='Nunca'},
+  {nome:'🚒 Totalmente apto',fn:r=>r.prom_aptidao_funcional==='Totalmente apto'},
+  {nome:'💊 Boa adesão',fn:r=>r.prom_adesao_medicacao==='Nunca / tomo corretamente'},
+  {nome:'🥗 Mudou hábitos',fn:r=>/Mudei/i.test(r.prom_mudanca_habitos||'')},
+];
+function renderPROMs(){
+  const marcos=['90 dias','180 dias','270 dias'];
+  const classe={'90 dias':'fill90','180 dias':'fill180','270 dias':'fill270'};
+  const tag={'90 dias':'90','180 dias':'180','270 dias':'270'};
+  let html='';
+  PROM_DOMINIOS.forEach(dom=>{
+    const vals=marcos.map(m=>{ const sub=DADOS.filter(r=>r.marco_programa===m); return pct(sub,dom.fn); });
+    const delta=vals[2]-vals[0];
+    const deltaTxt=DADOS.some(r=>r.marco_programa==='270 dias')&&DADOS.some(r=>r.marco_programa==='90 dias')
+      ? `<span class="melhora" style="color:${delta>=0?'var(--verde)':'var(--vermelho-alerta)'}">${delta>=0?'▲ +':'▼ '}${delta} pp</span>`:'';
+    html+=`<div class="prom-item"><div class="nome"><span>${dom.nome}</span>${deltaTxt}</div><div class="barras3">`;
+    marcos.forEach(m=>{ const v=vals[marcos.indexOf(m)];
+      html+=`<div class="barra-linha"><span class="tag">${tag[m]}d</span><div class="track"><div class="fill ${classe[m]}" style="width:${v}%">${v>12?v+'%':''}</div></div></div>`;
+    });
+    html+='</div></div>';
+  });
+  document.getElementById('promContainer').innerHTML=html;
+}
+
+/* Radar PREMs */
+const PREM_DIM=[
+  {nome:'Agendamento',fn:r=>['Muito fácil','Fácil'].includes(r.prem_agendamento)},
+  {nome:'Clareza',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_clareza_informacao)},
+  {nome:'Decisão\ncompartilhada',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_decisao_compartilhada)},
+  {nome:'Respeito',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_respeito)},
+  {nome:'Coordenação',fn:r=>['Muito bem integrada','Bem integrada'].includes(r.prem_coordenacao_cuidado)},
+  {nome:'Tempo de\nconsulta',fn:r=>['Sempre suficiente','Quase sempre'].includes(r.prem_tempo_consulta)},
+];
+function renderRadar(d){
+  const cx=200,cy=165,R=120,N=PREM_DIM.length;
+  const vals=PREM_DIM.map(dim=>pct(d,dim.fn));
+  let grid='';
+  [0.25,0.5,0.75,1].forEach(f=>{
+    let pts='';
+    for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;pts+=`${cx+R*f*Math.cos(a)},${cy+R*f*Math.sin(a)} `;}
+    grid+=`<polygon points="${pts}" fill="none" stroke="#E4D9C8" stroke-width="1"/>`;
+  });
+  let eixos='',labels='',area='';
+  for(let i=0;i<N;i++){
+    const a=-Math.PI/2+i*2*Math.PI/N;
+    const x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
+    eixos+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#E4D9C8" stroke-width="1"/>`;
+    const lx=cx+(R+22)*Math.cos(a),ly=cy+(R+22)*Math.sin(a);
+    PREM_DIM[i].nome.split('\n').forEach((ln,k)=>{
+      labels+=`<text x="${lx}" y="${ly+k*11}" font-size="9.5" font-weight="600" fill="#1A4E8B" text-anchor="middle">${ln}</text>`;
+    });
+  }
+  let pts='';
+  for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;const f=vals[i]/100;pts+=`${cx+R*f*Math.cos(a)},${cy+R*f*Math.sin(a)} `;}
+  area=`<polygon points="${pts}" fill="rgba(26,78,139,.22)" stroke="#1A4E8B" stroke-width="2.5"/>`;
+  let dots='';
+  for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;const f=vals[i]/100;const x=cx+R*f*Math.cos(a),y=cy+R*f*Math.sin(a);
+    dots+=`<circle cx="${x}" cy="${y}" r="3.5" fill="#1A4E8B"/><text x="${x}" y="${y-7}" font-size="9" font-weight="800" fill="#5E0F0F" text-anchor="middle">${vals[i]}</text>`;}
+  document.getElementById('radarPrem').innerHTML=grid+eixos+labels+area+dots;
+}
+
+/* NPS */
+function calcNPS(d){
+  if(!d.length)return 0;
+  const p=d.filter(r=>parseInt(r.nps_recomendacao)>=9).length;
+  const det=d.filter(r=>parseInt(r.nps_recomendacao)<=6).length;
+  return Math.round((p-det)/d.length*100);
+}
+function faixaNPS(n){ if(n>=75)return 'Excelência';if(n>=50)return 'Muito bom';if(n>=0)return 'Aperfeiçoar';return 'Crítico'; }
+function corNPS(n){ if(n>=50)return 'var(--verde)';if(n>=0)return 'var(--amarelo)';return 'var(--vermelho-alerta)'; }
+function renderNPS(d){
+  const nps=calcNPS(d);
+  document.getElementById('npsNum').textContent=(nps>0?'+':'')+nps;
+  const faixa=document.getElementById('npsFaixa');
+  faixa.textContent=faixaNPS(nps); faixa.style.background=corNPS(nps); faixa.style.color='#fff';
+  const tot=d.length||1;
+  const prom=Math.round(d.filter(r=>parseInt(r.nps_recomendacao)>=9).length/tot*100);
+  const neu=Math.round(d.filter(r=>{const v=parseInt(r.nps_recomendacao);return v>=7&&v<=8;}).length/tot*100);
+  const det=Math.round(d.filter(r=>parseInt(r.nps_recomendacao)<=6).length/tot*100);
+  document.getElementById('npsBarras').innerHTML=`
+    <div class="nps-b"><span class="lab">😍 Promotores</span><div class="tr"><div class="fl" style="width:${prom}%;background:var(--verde)">${prom>8?prom+'%':''}</div></div></div>
+    <div class="nps-b"><span class="lab">😐 Neutros</span><div class="tr"><div class="fl" style="width:${neu}%;background:var(--amarelo)">${neu>8?neu+'%':''}</div></div></div>
+    <div class="nps-b"><span class="lab">😞 Detratores</span><div class="tr"><div class="fl" style="width:${det}%;background:var(--vermelho-alerta)">${det>8?det+'%':''}</div></div></div>`;
+}
+
+/* Participação por marco */
+const ELEGIVEIS={'90 dias':115,'180 dias':115,'270 dias':115};
+function renderParticipacao(){
+  const marcos=['90 dias','180 dias','270 dias'];
+  const classe={'90 dias':'fill90','180 dias':'fill180','270 dias':'fill270'};
+  let html='';
+  marcos.forEach(m=>{
+    const n=DADOS.filter(r=>r.marco_programa===m).length;
+    const eleg=ELEGIVEIS[m];
+    const p=Math.min(100,Math.round(n/eleg*100));
+    html+=`<div class="prom-item"><div class="nome"><span>${m}</span><span class="melhora">${n} de ${eleg}</span></div>
+      <div class="barra-linha"><div class="track" style="height:20px"><div class="fill ${classe[m]}" style="width:${p}%">${p}%</div></div></div></div>`;
+  });
+  document.getElementById('participacao').innerHTML=html;
+}
+
+/* Busca ativa */
+function prioridade(r){
+  let score=0;
+  if(parseFloat(r.prom_saude_geral)<=4)score+=2;
+  ['prom_dor_toracica','prom_dispneia','prom_palpitacoes'].forEach(c=>{ if(r[c]==='Frequentemente')score+=2; else if(r[c]==='Algumas vezes')score+=1; });
+  if(r.prom_aptidao_funcional==='Não me sinto apto')score+=3;
+  else if(r.prom_aptidao_funcional==='Apto com limitações importantes')score+=2;
+  if(r.prom_adesao_medicacao==='Frequentemente')score+=2;
+  else if(r.prom_adesao_medicacao==='Algumas vezes')score+=1;
+  if(/pior/i.test(r.prom_evolucao_percebida||''))score+=2;
+  return score;
+}
+function renderBusca(d){
+  const linhas=d.map(r=>({r,s:prioridade(r)})).filter(x=>x.s>=3).sort((a,b)=>b.s-a.s).slice(0,15);
+  const sintomas=r=>{const l=[];if(r.prom_dor_toracica!=='Nunca')l.push('dor');if(r.prom_dispneia!=='Nunca')l.push('dispneia');if(r.prom_palpitacoes!=='Nunca')l.push('palpitação');return l.join(', ')||'—';};
+  const badge=s=>s>=6?'<span class="badge b-alto">ALTA</span>':s>=4?'<span class="badge b-medio">MÉDIA</span>':'<span class="badge b-baixo">BAIXA</span>';
+  if(!linhas.length){document.getElementById('tabelaBusca').innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--verde);font-weight:600;padding:18px">✅ Nenhum militar em critério de busca ativa no filtro atual.</td></tr>';return;}
+  document.getElementById('tabelaBusca').innerHTML=linhas.map(({r,s})=>`
+    <tr><td><strong>${r.rg_cbmerj}</strong></td><td>${r.marco_programa}</td>
+    <td>${r.prom_saude_geral}</td><td>${sintomas(r)}</td>
+    <td>${(r.prom_aptidao_funcional||'').replace('Apto com l','L')}</td>
+    <td>${r.prom_adesao_medicacao==='Nunca / tomo corretamente'?'Boa':r.prom_adesao_medicacao}</td>
+    <td>${badge(s)}</td></tr>`).join('');
+}
+
+document.getElementById('filtroMarco').addEventListener('change',render);
+carregar();
+</script>
+</body>
+</html>
