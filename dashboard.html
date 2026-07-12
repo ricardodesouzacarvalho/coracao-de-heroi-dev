@@ -52,6 +52,9 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .bar-track{height:14px;background:#edf0f2;border-radius:4px;overflow:hidden}
 .bar-fill{height:100%;background:var(--blue);border-radius:4px 0 0 4px}
 .bar-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.split .bar-row{grid-template-columns:minmax(0,1.1fr) minmax(0,1.5fr) auto;gap:6px}
+.split .bar-track{min-width:36px}
+.split .bar-value{min-width:22px;padding-left:2px}
 .stack{height:30px;display:flex;border-radius:5px;overflow:hidden;background:#edf0f2}
 .stack span{height:100%;min-width:0}
 .stack-labels{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:9px;color:var(--muted);font-size:.7rem}
