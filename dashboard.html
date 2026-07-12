@@ -59,6 +59,8 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .bar-tip{position:fixed;z-index:60;background:#25282c;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;line-height:1.35;pointer-events:none;opacity:0;transition:opacity .1s;box-shadow:0 4px 12px #0003;max-width:240px}
 .bar-tip.show{opacity:1}
 .bar-tip strong{display:block;font-weight:700;margin-bottom:1px}
+.stat-tip{cursor:help;border-bottom:1px dotted #98a1a9;white-space:nowrap}
+.stat-tip.sig{font-weight:700;color:var(--green)}
 .stack{height:30px;display:flex;border-radius:5px;overflow:hidden;background:#edf0f2}
 .stack span{height:100%;min-width:0}
 .stack-labels{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:9px;color:var(--muted);font-size:.7rem}
@@ -606,17 +608,86 @@ function pairedDeltas(){
       if(Number.isFinite(base.physicalT)&&Number.isFinite(current.physicalT))dPhysical.push(current.physicalT-base.physicalT);
       if(Number.isFinite(base.mentalT)&&Number.isFinite(current.mentalT))dMental.push(current.mentalT-base.mentalT);
     });
-    return {marker:marker,n:Math.max(dPhysical.length,dMental.length),dPhysical:mean(dPhysical),dMental:mean(dMental)};
+    return {marker:marker,phys:pairedTTest(dPhysical),ment:pairedTTest(dMental)};
   });
+}
+
+/* ---- Estatística da evolução pareada: teste t pareado (bicaudal) + d_z de Cohen ---- */
+function logGamma(x){
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x,tmp=x+5.5;
+  tmp-=(x+0.5)*Math.log(tmp);
+  let ser=1.000000000190015;
+  for(let j=0;j<6;j++){y+=1;ser+=c[j]/y;}
+  return -tmp+Math.log(2.5066282746310005*ser/x);
+}
+function betacf(a,b,x){
+  const FPMIN=1e-300;
+  let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;
+  if(Math.abs(d)<FPMIN)d=FPMIN;
+  d=1/d;let h=d;
+  for(let m=1;m<=200;m++){
+    const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d;h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d;const del=d*c;h*=del;
+    if(Math.abs(del-1)<3e-12)break;
+  }
+  return h;
+}
+function ibeta(a,b,x){
+  if(x<=0)return 0;
+  if(x>=1)return 1;
+  const bt=Math.exp(logGamma(a+b)-logGamma(a)-logGamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  if(x<(a+1)/(a+b+2))return bt*betacf(a,b,x)/a;
+  return 1-bt*betacf(b,a,1-x)/b;
+}
+function pairedTTest(diffs){
+  const n=diffs.length;
+  if(!n)return null;
+  const m=diffs.reduce(function(s,v){return s+v;},0)/n;
+  if(n<2)return {n:n,mean:m,p:null,dz:null};
+  const variance=diffs.reduce(function(s,v){return s+(v-m)*(v-m);},0)/(n-1);
+  const sdv=Math.sqrt(variance);
+  if(sdv===0)return {n:n,mean:m,p:m===0?1:null,dz:null};
+  const t=m/(sdv/Math.sqrt(n)),df=n-1;
+  return {n:n,mean:m,p:ibeta(df/2,0.5,df/(df+t*t)),dz:m/sdv};
+}
+function fmtP(p){return p<0.001?'&lt;0,001':p.toFixed(3).replace('.',',');}
+function pTip(p){
+  return p<0.05
+    ?'p = '+(p<0.001?'<0,001':p.toFixed(3).replace('.',','))+' — diferença estatisticamente significativa (p < 0,05; teste t pareado, bicaudal)'
+    :'p = '+p.toFixed(3).replace('.',',')+' — diferença sem significância estatística (p ≥ 0,05; teste t pareado, bicaudal)';
+}
+function dzGrade(dz){const a=Math.abs(dz);return a<0.2?'trivial':a<0.5?'pequeno':a<0.8?'médio':'grande';}
+function dzTip(dz){
+  return 'd_z de Cohen = '+dz.toFixed(2).replace('.',',')+' — efeito '+dzGrade(dz)+' (limiares: 0,2 pequeno · 0,5 médio · 0,8 grande)';
 }
 function renderPaired(){
   const list=pairedDeltas();
-  if(!list.some(function(x){return x.n>0;})){
+  if(!list.some(function(x){return (x.phys&&x.phys.n>0)||(x.ment&&x.ment.n>0);})){
     document.getElementById('pairedDeltas').innerHTML='<div class="empty">Ainda não há participantes com resposta no marco Inicial e em marcos seguintes.</div>';
     return;
   }
-  function fmt(v){return v===null?'—':(v>0?'+':'')+v.toFixed(1);}
-  document.getElementById('pairedDeltas').innerHTML='<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>Pares</th><th>Δ T físico</th><th>Δ T mental</th></tr></thead><tbody>'+list.map(function(x){return '<tr><td>Inicial → '+x.marker+'</td><td>'+x.n+'</td><td>'+fmt(x.dPhysical)+'</td><td>'+fmt(x.dMental)+'</td></tr>';}).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score considerando apenas o mesmo participante presente nos dois momentos — elimina o viés de composição entre ondas.</p>';
+  function deltaCell(s){return '<td>'+(s&&s.n?((s.mean>0?'+':'')+s.mean.toFixed(1).replace('.',',')):'—')+'</td>';}
+  function pCell(s){
+    if(!s||s.p===null||s.p===undefined)return '<td>—</td>';
+    const sig=s.p<0.05;
+    return '<td><span class="stat-tip'+(sig?' sig':'')+'" data-tip="'+esc(pTip(s.p))+'">'+fmtP(s.p)+(sig?' *':'')+'</span></td>';
+  }
+  function dCell(s){
+    if(!s||s.dz===null||s.dz===undefined)return '<td>—</td>';
+    return '<td><span class="stat-tip" data-tip="'+esc(dzTip(s.dz))+'">'+s.dz.toFixed(2).replace('.',',')+'</span></td>';
+  }
+  document.getElementById('pairedDeltas').innerHTML='<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>Domínio</th><th>Pares</th><th>Δ T-score</th><th>Valor de p</th><th>Tamanho do efeito (d_z)</th></tr></thead><tbody>'+list.map(function(x){
+    return '<tr><td rowspan="2">Inicial → '+x.marker+'</td><td>Físico</td><td>'+(x.phys?x.phys.n:0)+'</td>'+deltaCell(x.phys)+pCell(x.phys)+dCell(x.phys)+'</tr>'
+         +'<tr><td>Mental</td><td>'+(x.ment?x.ment.n:0)+'</td>'+deltaCell(x.ment)+pCell(x.ment)+dCell(x.ment)+'</tr>';
+  }).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score no mesmo participante entre os dois momentos (elimina o viés de composição entre ondas). Valor de p: teste t pareado bicaudal sobre as diferenças individuais; tamanho do efeito: d_z de Cohen (média das diferenças ÷ desvio-padrão das diferenças). * p &lt; 0,05. Passe o cursor sobre os valores para a interpretação.</p>';
 }
 
 function maskedId(v){const s=String(v||'');return s.length<=3?'•••'+s:'•••'+s.slice(-3);}
@@ -661,23 +732,28 @@ function positionTip(event){
   barTip.style.left=Math.max(6,x)+'px';
   barTip.style.top=Math.max(6,y)+'px';
 }
-document.addEventListener('mouseover',function(event){
-  const row=event.target.closest?event.target.closest('.bar-row[data-abs]'):null;
-  if(!row)return;
-  const abs=row.getAttribute('data-abs'),total=row.getAttribute('data-total'),full=row.getAttribute('data-full');
+const TIP_SELECTOR='.bar-row[data-abs],[data-tip]';
+function tipContentFor(el){
+  if(el.hasAttribute('data-tip'))return esc(el.getAttribute('data-tip'));
+  const abs=el.getAttribute('data-abs'),total=el.getAttribute('data-total'),full=el.getAttribute('data-full');
   const n=Number(abs),unidade=n===1?'resposta':'respostas';
-  barTip.innerHTML='<strong>'+esc(full)+'</strong>'+abs+' '+unidade+(total?' de '+total:'');
+  return '<strong>'+esc(full)+'</strong>'+abs+' '+unidade+(total?' de '+total:'');
+}
+document.addEventListener('mouseover',function(event){
+  const el=event.target.closest?event.target.closest(TIP_SELECTOR):null;
+  if(!el)return;
+  barTip.innerHTML=tipContentFor(el);
   barTip.classList.add('show');
   positionTip(event);
 });
 document.addEventListener('mousemove',function(event){
   if(!barTip.classList.contains('show'))return;
-  if(event.target.closest&&event.target.closest('.bar-row[data-abs]'))positionTip(event);
+  if(event.target.closest&&event.target.closest(TIP_SELECTOR))positionTip(event);
   else barTip.classList.remove('show');
 });
 document.addEventListener('mouseout',function(event){
-  const row=event.target.closest?event.target.closest('.bar-row[data-abs]'):null;
-  if(row&&(!event.relatedTarget||!event.relatedTarget.closest||!event.relatedTarget.closest('.bar-row[data-abs]')))barTip.classList.remove('show');
+  const el=event.target.closest?event.target.closest(TIP_SELECTOR):null;
+  if(el&&(!event.relatedTarget||!event.relatedTarget.closest||!event.relatedTarget.closest(TIP_SELECTOR)))barTip.classList.remove('show');
 });
 
 load();
