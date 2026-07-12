@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório de Análise — Formulário PROMIS Global Health · Coração de Herói</title>
+<style>
+:root{
+  --vinho:#761515;--escuro:#4e0b0b;--vermelho:#c41e1e;--dourado:#d4a017;
+  --fundo:#faf7f2;--texto:#343434;--muted:#6b6b6b;--azul:#1a4e8b;
+  --ok:#1a7f37;--ok-bg:#e7f4ea;--warn:#9a6700;--warn-bg:#fff8e1;
+  --erro:#b42318;--erro-bg:#fdecea;--info:#1a4e8b;--info-bg:#eef4fb;
+  --card:#fff;--borda:#e4d9c8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+header{padding:34px 20px 30px;background:linear-gradient(135deg,var(--escuro),var(--vermelho));color:#fff;text-align:center}
+header h1{margin:0;font-size:1.55rem}
+header h1 span{color:#f3d27b}
+header p{margin:8px auto 0;max-width:760px;font-size:.92rem;opacity:.95}
+.meta{display:inline-block;margin-top:14px;padding:4px 14px;border-radius:999px;background:#f4c542;color:#4a3800;font-size:.72rem;font-weight:bold;letter-spacing:.06em;text-transform:uppercase}
+.container{max-width:900px;margin:auto;padding:28px 18px 60px}
+h2{color:var(--escuro);font-size:1.25rem;margin:38px 0 14px;padding-bottom:8px;border-bottom:3px solid var(--dourado)}
+h3{color:var(--vinho);font-size:1.02rem;margin:26px 0 8px}
+section.card{background:var(--card);border-radius:14px;box-shadow:0 4px 14px #5e0f0f14;padding:22px 24px;margin-bottom:20px}
+.resumo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:18px 0}
+.tile{background:var(--card);border-radius:12px;padding:16px;text-align:center;box-shadow:0 3px 10px #5e0f0f12;border-top:4px solid var(--dourado)}
+.tile .num{font-size:1.9rem;font-weight:800;color:var(--escuro)}
+.tile.t-ok{border-top-color:var(--ok)}.tile.t-ok .num{color:var(--ok)}
+.tile.t-crit{border-top-color:var(--erro)}.tile.t-crit .num{color:var(--erro)}
+.tile.t-alto{border-top-color:#d4700a}.tile.t-alto .num{color:#d4700a}
+.tile.t-med{border-top-color:var(--warn)}.tile.t-med .num{color:var(--warn)}
+.tile p{margin:4px 0 0;font-size:.8rem;color:var(--muted)}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:bold;letter-spacing:.03em;vertical-align:middle;white-space:nowrap}
+.b-crit{background:var(--erro-bg);color:var(--erro);border:1px solid var(--erro)}
+.b-alto{background:#fdf0e3;color:#b35900;border:1px solid #d4700a}
+.b-med{background:var(--warn-bg);color:var(--warn);border:1px solid #e0a400}
+.b-baixo{background:#eef1f4;color:#4b5563;border:1px solid #c7ced6}
+.b-forte{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok)}
+ul.pontos{padding-left:0;list-style:none;margin:10px 0}
+ul.pontos li{position:relative;padding:10px 12px 10px 38px;margin-bottom:8px;background:#fdfcfa;border:1px solid var(--borda);border-radius:9px;font-size:.92rem}
+ul.pontos li::before{content:"✔";position:absolute;left:13px;top:10px;color:var(--ok);font-weight:bold}
+ul.pontos.fracos li::before{content:"✖";color:var(--erro)}
+.achado{border:1px solid var(--borda);border-left:5px solid var(--muted);border-radius:10px;background:#fdfcfa;padding:14px 16px;margin-bottom:14px}
+.achado.crit{border-left-color:var(--erro);background:#fffafa}
+.achado.alto{border-left-color:#d4700a}
+.achado.med{border-left-color:#e0a400}
+.achado.baixo{border-left-color:#c7ced6}
+.achado h4{margin:0 0 6px;font-size:.95rem;color:var(--escuro)}
+.achado p{margin:6px 0;font-size:.89rem}
+.achado .rotulo{font-weight:700;color:var(--vinho)}
+code{background:#f3ece0;border-radius:5px;padding:1px 6px;font-size:.84em;font-family:"SF Mono",Menlo,Consolas,monospace}
+pre{background:#211313;color:#f5eee4;border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit}
+table{width:100%;border-collapse:collapse;font-size:.87rem;margin:12px 0}
+th,td{padding:9px 10px;border:1px solid var(--borda);text-align:left;vertical-align:top}
+th{background:var(--vinho);color:#fff;font-size:.8rem;letter-spacing:.03em}
+tr:nth-child(even) td{background:#fbf8f3}
+.tabela-scroll{overflow-x:auto}
+.nota{font-size:.8rem;color:var(--muted);font-style:italic}
+footer{padding:22px;text-align:center;background:#211313;color:#fff;font-size:.78rem;border-top:3px solid var(--dourado)}
+@media(max-width:560px){header h1{font-size:1.2rem}section.card{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>RELATÓRIO DE ANÁLISE · <span>FORMULÁRIO PROMIS GLOBAL HEALTH</span></h1>
+  <p>Avaliação técnica do arquivo <strong>index-promis-global-piloto-60d.html</strong> (Piloto / homologação · Programa Coração de Herói · CBMERJ) — pontos fortes, pontos fracos e recomendações de aprimoramento.</p>
+  <div class="meta">Análise gerada em 12/07/2026 · arquivo original preservado sem alterações</div>
+</header>
+
+<main class="container">
+
+<!-- ============ RESUMO EXECUTIVO ============ -->
+<h2>1. Resumo executivo</h2>
+<section class="card">
+<p>O formulário é um instrumento <strong>bem construído para a fase de piloto</strong>: arquivo único e autossuficiente, com lógica condicional correta, cálculo automático de marcos longitudinais (0/90/180/270 dias), escore PROMIS bruto calculado no cliente com recodificação da dor conforme o manual oficial, checagem de duplicidade por RG + marco e confirmação ativa de gravação no Apps Script — um desenho de envio mais robusto que o padrão <em>fire-and-forget</em> comum nesse tipo de integração.</p>
+<p>Os riscos mais relevantes concentram-se em <strong>três frentes</strong>: (1) <strong>acessibilidade/compatibilidade</strong> — as escalas 0–10 são inutilizáveis por teclado e leitores de tela, e todo o feedback visual de seleção depende do seletor CSS <code>:has()</code>, indisponível em navegadores/WebViews mais antigos; (2) <strong>privacidade</strong> — o RG trafega em query string via JSONP e o endpoint de checagem permite que qualquer pessoa consulte se um RG respondeu; (3) <strong>integridade do dado longitudinal</strong> — o pareamento entre ondas depende de RG e data de inspeção digitados livremente, sem redundância contra erro de digitação, e a pergunta 21 (obrigatória no rótulo) nunca é validada.</p>
+<div class="resumo-grid">
+  <div class="tile t-ok"><div class="num">14</div><p>Pontos fortes identificados</p></div>
+  <div class="tile t-crit"><div class="num">3</div><p>Achados críticos</p></div>
+  <div class="tile t-alto"><div class="num">4</div><p>Achados de prioridade alta</p></div>
+  <div class="tile t-med"><div class="num">6</div><p>Achados médios</p></div>
+  <div class="tile"><div class="num">4</div><p>Achados baixos / cosméticos</p></div>
+</div>
+<p class="nota">Severidade avaliada pelo impacto sobre: capacidade do respondente concluir o questionário, proteção de dados pessoais (LGPD) e validade analítica da série longitudinal.</p>
+</section>
+
+<!-- ============ PONTOS FORTES ============ -->
+<h2>2. Pontos fortes</h2>
+<section class="card">
+<h3>Engenharia e confiabilidade do envio</h3>
+<ul class="pontos">
+  <li><strong>Confirmação ativa de gravação:</strong> após o <code>POST</code> em <code>no-cors</code> (resposta opaca), o código consulta o Apps Script até 3 vezes (<code>confirmSaved</code>) e só exibe sucesso quando a resposta é localizada na planilha. Isso elimina o falso-positivo clássico do padrão <code>no-cors</code>.</li>
+  <li><strong>Checagem de duplicidade pré-envio</strong> por RG + marco, com mensagem clara ao respondente — coerente com a regra “cada RG responde uma vez por marco”.</li>
+  <li><strong>Proteção contra duplo clique:</strong> botão desabilitado e com estado “Enviando…” durante a submissão.</li>
+  <li><strong>JSONP com timeout e limpeza corretos:</strong> callback único por chamada, <code>clearTimeout</code>, remoção do script e tratamento de erro de rede.</li>
+  <li><strong>Arquivo único, sem dependências externas</strong> (nenhum CDN, fonte ou biblioteca) — funciona em intranet restrita e carrega instantaneamente.</li>
+</ul>
+<h3>Qualidade metodológica e analítica</h3>
+<ul class="pontos">
+  <li><strong>Recodificação da dor (item 7) conforme o manual PROMIS</strong> (0→5, 1–3→4, 4–6→3, 7–9→2, 10→1) e composição correta dos escores brutos: físico = itens 3+6+7r+8; mental = itens 2+4+5+10.</li>
+  <li><strong>Versionamento do instrumento e do escore</strong> (<code>versao_formulario</code>, <code>promis_scoring_version</code>) gravados em cada resposta — essencial para auditar comparabilidade entre ondas.</li>
+  <li><strong>Transparência metodológica:</strong> o próprio formulário declara que os itens 1, 2 e 6 têm redação adaptada e que isso precisa de confirmação antes da aplicação definitiva.</li>
+  <li><strong>Estratificação longitudinal automática:</strong> cálculo de dias desde a inspeção, marco analítico, estrato e flag “janela recomendada” em campos ocultos — respostas fora da janela não são rejeitadas, apenas marcadas para análise separada (boa prática de coleta).</li>
+  <li><strong>Classificação NPS calculada no cliente</strong> (Promotor/Neutro/Detrator), padronizando o dado desde a origem.</li>
+</ul>
+<h3>Experiência do respondente (UX)</h3>
+<ul class="pontos">
+  <li><strong>Lógica condicional bem gerida:</strong> blocos de exames pendentes e tabagismo aparecem apenas quando aplicáveis, com <code>disabled</code> + <code>required</code> ajustados dinamicamente — campos ocultos não bloqueiam o envio nem entram no payload.</li>
+  <li><strong>Barra de progresso fixa (sticky)</strong> recalculada apenas sobre os campos obrigatórios visíveis, dando percepção realista de avanço em um questionário de 37 itens.</li>
+  <li><strong>Opções “não se aplica” em todas as PREMs</strong>, evitando resposta forçada que contamina o dado de experiência.</li>
+  <li><strong>Identidade visual consistente</strong> com o programa (vinho/dourado), responsiva, com avisos de segurança clínica (“não substitui atendimento”) e consentimento LGPD obrigatório.</li>
+</ul>
+</section>
+
+<!-- ============ PONTOS FRACOS ============ -->
+<h2>3. Pontos fracos e riscos</h2>
+
+<section class="card">
+<h3>🔴 Críticos</h3>
+
+<div class="achado crit">
+<h4>C1 · Escalas 0–10 inacessíveis por teclado e leitor de tela <span class="badge b-crit">CRÍTICO</span></h4>
+<p>O CSS <code>.escala input{display:none}</code> remove os radio buttons das perguntas 7 (dor), 27 (confiança) e 35 (NPS) da árvore de acessibilidade e da navegação por Tab. Quem usa teclado ou leitor de tela <strong>não consegue responder três perguntas obrigatórias</strong> — o formulário fica impossível de concluir.</p>
+<p><span class="rotulo">Correção:</span> substituir <code>display:none</code> pela técnica “visually hidden” e adicionar indicador de foco:</p>
+<pre><code>.escala input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
+.escala label:has(input:focus-visible){outline:3px solid var(--azul);outline-offset:2px}</code></pre>
+</div>
+
+<div class="achado crit">
+<h4>C2 · Todo o feedback de seleção depende de <code>:has()</code> <span class="badge b-crit">CRÍTICO</span></h4>
+<p>O destaque visual do item marcado (<code>.opcoes label:has(input:checked)</code> e <code>.escala label:has(input:checked)</code>) exige Chrome ≥ 105 / Safari ≥ 15.4 (2022+). Em Android WebView ou navegadores desatualizados — cenário plausível em aparelhos funcionais — as opções das escalas 0–10 <strong>não mostram nenhuma indicação do que foi selecionado</strong> (os radios estão ocultos), e nas demais perguntas o destaque some. O respondente não sabe o que marcou.</p>
+<p><span class="rotulo">Correção:</span> fallback via JavaScript — no evento <code>change</code>, aplicar/remover uma classe <code>.selecionada</code> no <code>label</code> pai e estilizar essa classe em paralelo ao <code>:has()</code>. Custo baixo, elimina a dependência.</p>
+</div>
+
+<div class="achado crit">
+<h4>C3 · RG em query string + endpoint de checagem aberto <span class="badge b-crit">CRÍTICO (LGPD)</span></h4>
+<p>Dois problemas combinados: (1) a checagem de duplicidade envia o RG como parâmetro GET via JSONP — dado pessoal fica registrado em logs de servidor, histórico e proxies; (2) o endpoint <code>action=check</code> é público e sem autenticação: <strong>qualquer pessoa que conheça a URL pode enumerar RGs e descobrir se um militar respondeu determinado marco</strong> — vazamento de metadado de saúde.</p>
+<p><span class="rotulo">Correção:</span> no curto prazo, consultar por hash (SHA-256 do RG + sal fixo no Apps Script) em vez do RG puro, e responder ao <code>check</code> sempre no mesmo formato/tempo. No médio prazo, adotar o código de convite pseudonimizado que o próprio formulário já anuncia como plano, e mover a deduplicação para o servidor (a resposta do POST decide, não um pré-check).</p>
+</div>
+
+<h3>🟠 Prioridade alta</h3>
+
+<div class="achado alto">
+<h4>A1 · Pergunta 21 marcada como obrigatória, mas nunca validada <span class="badge b-alto">ALTO</span></h4>
+<p>A questão 21 (“O que contribuiu para a pendência? … *”) é um grupo de checkboxes dentro de <code>.condicional-exames</code>, porém <code>setConditional()</code> só torna obrigatório o primeiro input quando é <code>radio</code>, e a validação manual do <code>submit</code> cobre apenas a pergunta 20. Resultado: <strong>é possível enviar com a 21 vazia</strong>, gerando dado faltante justamente na pergunta que explica a barreira de acesso — um dos objetivos centrais do bloco PREM.</p>
+<p><span class="rotulo">Correção:</span> replicar no <code>submit</code> a mesma checagem já feita para a 20: se <code>#blocoMotivosExames</code> estiver visível e nenhum checkbox marcado, bloquear com mensagem.</p>
+</div>
+
+<div class="achado alto">
+<h4>A2 · Sem persistência local — 37 perguntas perdidas em um refresh <span class="badge b-alto">ALTO</span></h4>
+<p>Qualquer recarga acidental, queda de conexão no meio do preenchimento ou troca de aba agressiva (comum em celular) descarta tudo. Em um instrumento longo, isso derruba taxa de conclusão e irrita o respondente.</p>
+<p><span class="rotulo">Correção:</span> autosave em <code>localStorage</code> a cada <code>change</code> (serializar <code>FormData</code>), restaurar ao carregar e limpar após envio confirmado. ~20 linhas de código, sem servidor.</p>
+</div>
+
+<div class="achado alto">
+<h4>A3 · Pareamento longitudinal frágil: RG e data digitados livremente <span class="badge b-alto">ALTO</span></h4>
+<p>Toda a série longitudinal depende de dois campos digitados sem redundância: um RG com validação mínima (≥ 3 dígitos) e a data da inspeção informada de memória. Um dígito trocado cria um “respondente fantasma” e quebra o pareamento entre ondas; uma data lembrada errado classifica a resposta no marco errado — e a deduplicação por RG+marco passa a permitir duplicatas reais ou bloquear respostas legítimas.</p>
+<p><span class="rotulo">Correção:</span> (a) campo de confirmação do RG (digitar duas vezes, comparar); (b) validar RG contra a lista de inscritos no Apps Script e, idealmente, <strong>retornar a data de inspeção registrada</strong> em vez de pedir que o militar a informe; (c) adicionar <code>max</code> (hoje) e <code>min</code> plausível no input de data.</p>
+</div>
+
+<div class="achado alto">
+<h4>A4 · Timeout de 12 s vs. cold start do Apps Script <span class="badge b-alto">ALTO</span></h4>
+<p>O Apps Script frequentemente leva 10–30 s na primeira invocação (cold start). O pré-check de duplicidade tem tentativa única com timeout de 12 s: se estourar, o fluxo cai no <code>catch</code> e mostra erro genérico <strong>antes mesmo de tentar enviar</strong> — o usuário pode desistir sem que nada estivesse errado.</p>
+<p><span class="rotulo">Correção:</span> aplicar ao pré-check a mesma lógica de retry do <code>confirmSaved</code> (2–3 tentativas) e/ou disparar um “ping” de aquecimento ao carregar a página; aumentar o timeout para ~20 s.</p>
+</div>
+
+<h3>🟡 Prioridade média</h3>
+
+<div class="achado med">
+<h4>M1 · Perguntas sem associação programática com suas opções <span class="badge b-med">MÉDIO</span></h4>
+<p>O enunciado de cada pergunta é um <code>&lt;label&gt;</code> solto (sem <code>for</code>), e os grupos de rádio não usam <code>fieldset/legend</code> nem <code>role="radiogroup"</code> + <code>aria-labelledby</code>. Leitores de tela anunciam as opções (“Sempre”, “Nunca”…) sem contexto de qual pergunta está sendo respondida.</p>
+<p><span class="rotulo">Correção:</span> envolver cada questão em <code>&lt;fieldset&gt;</code> com o enunciado em <code>&lt;legend&gt;</code>, ou dar <code>id</code> ao enunciado e <code>role="radiogroup" aria-labelledby</code> ao contêiner de opções. Adicionar <code>role="alert"</code>/<code>aria-live="assertive"</code> à caixa de erro e <code>aria-live="polite"</code> ao texto de progresso.</p>
+</div>
+
+<div class="achado med">
+<h4>M2 · Carimbo de data/hora em texto localizado, não ISO <span class="badge b-med">MÉDIO</span></h4>
+<p><code>carimbo_data_hora</code> usa <code>toLocaleString('pt-BR')</code> (“12/07/2026 14:03:22”), que não ordena corretamente como texto e é ambíguo para reprocessamento. Além disso, o relógio do dispositivo do respondente pode estar errado.</p>
+<p><span class="rotulo">Correção:</span> gravar também <code>new Date().toISOString()</code> em um campo <code>carimbo_iso</code> e, preferencialmente, registrar o timestamp oficial no servidor (Apps Script) no momento da gravação.</p>
+</div>
+
+<div class="achado med">
+<h4>M3 · Consentimento LGPD sem trilha de auditoria <span class="badge b-med">MÉDIO</span></h4>
+<p>O consentimento é gravado apenas como “Sim”. Para fins de LGPD, convém registrar <strong>qual texto</strong> foi consentido e quando.</p>
+<p><span class="rotulo">Correção:</span> incluir no payload <code>lgpd_versao_texto</code> (ex.: “consentimento-v1-2026-07”) e o timestamp ISO do envio; manter o texto versionado no repositório.</p>
+</div>
+
+<div class="achado med">
+<h4>M4 · Sem T-score PROMIS <span class="badge b-med">MÉDIO</span></h4>
+<p>São gravados apenas os escores brutos (4–20). A comparação com normas populacionais e a comunicação clínica usam T-scores (média 50, DP 10), obtidos por tabela de conversão oficial.</p>
+<p><span class="rotulo">Correção:</span> embutir a tabela de conversão bruto→T (17 entradas por domínio) no cliente ou no Apps Script e gravar <code>promis_gph_tscore</code> / <code>promis_gmh_tscore</code>. Manter a ressalva: com itens adaptados, o T-score deve ser rotulado como aproximado até a validação da redação.</p>
+</div>
+
+<div class="achado med">
+<h4>M5 · Formulário público sem barreira mínima contra submissões indevidas <span class="badge b-med">MÉDIO</span></h4>
+<p>Qualquer pessoa com a URL e um RG válido pode responder em nome de terceiros (inclusive esgotando o marco da pessoa, que ficará bloqueada pela deduplicação). Não há honeypot, token de convite ou verificação.</p>
+<p><span class="rotulo">Correção:</span> no piloto, ao menos um campo honeypot invisível + validação do RG contra o roster no servidor. Na produção, link individual com token (o “código de convite pseudonimizado” já planejado resolve isso também).</p>
+</div>
+
+<div class="achado med">
+<h4>M6 · Data da inspeção sem limites no próprio input <span class="badge b-med">MÉDIO</span></h4>
+<p>A data futura só é rejeitada pela mensagem JS após interação; o input aceita qualquer valor (ex.: 2019, 2030). Definir <code>max</code> = hoje e um <code>min</code> plausível (início do programa) melhora o teclado/date-picker do celular e evita erro silencioso.</p>
+</div>
+
+<h3>⚪ Prioridade baixa</h3>
+
+<div class="achado baixo">
+<h4>B1 · Código monolítico em linhas únicas <span class="badge b-baixo">BAIXO</span></h4>
+<p>CSS e JS estão “minificados à mão” em linhas gigantes, dificultando manutenção, diff e revisão. Manter uma versão fonte legível (mesmo que se publique minificado) reduz risco de regressão nas próximas iterações.</p>
+</div>
+<div class="achado baixo">
+<h4>B2 · Emojis nos enunciados são lidos por leitores de tela <span class="badge b-baixo">BAIXO</span></h4>
+<p>“🪖”, “❤️”, “🪪” etc. são anunciados (“capacete militar…”), poluindo a leitura. Envolver em <code>&lt;span aria-hidden="true"&gt;</code>.</p>
+</div>
+<div class="achado baixo">
+<h4>B3 · Tela de sucesso não recapitula o registro <span class="badge b-baixo">BAIXO</span></h4>
+<p>Exibir o marco registrado (“Resposta registrada para o marco de 90 dias”) dá confirmação concreta e reduz dúvidas/retrabalho da equipe de navegação.</p>
+</div>
+<div class="achado baixo">
+<h4>B4 · Barra de progresso só atualiza no evento <code>change</code> <span class="badge b-baixo">BAIXO</span></h4>
+<p>Nos campos de texto, o progresso só reflete após perder o foco. Ouvir também o evento <code>input</code> torna o feedback imediato.</p>
+</div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<h2>4. Roadmap de aprimoramento sugerido</h2>
+<section class="card">
+<div class="tabela-scroll">
+<table>
+<thead><tr><th>Fase</th><th>Ação</th><th>Achados</th><th>Esforço</th><th>Impacto</th></tr></thead>
+<tbody>
+<tr><td rowspan="4"><strong>1 · Antes de ampliar o piloto</strong><br><span class="nota">(correções no próprio arquivo)</span></td>
+  <td>Escalas 0–10 acessíveis (visually-hidden + foco visível) e fallback JS para <code>:has()</code></td><td>C1, C2</td><td>Baixo</td><td>Muito alto</td></tr>
+<tr><td>Validar a pergunta 21 no envio (paridade com a 20)</td><td>A1</td><td>Muito baixo</td><td>Alto</td></tr>
+<tr><td>Retry no pré-check + timeout ~20 s + ping de aquecimento</td><td>A4</td><td>Baixo</td><td>Alto</td></tr>
+<tr><td><code>max</code>/<code>min</code> no campo de data · timestamp ISO · versão do texto LGPD</td><td>M2, M3, M6</td><td>Muito baixo</td><td>Médio</td></tr>
+<tr><td rowspan="3"><strong>2 · Durante o piloto</strong></td>
+  <td>Autosave em <code>localStorage</code> com restauração e limpeza pós-envio</td><td>A2</td><td>Baixo</td><td>Alto</td></tr>
+<tr><td>Confirmação do RG (dupla digitação) e validação contra roster no Apps Script</td><td>A3, M5</td><td>Médio</td><td>Muito alto</td></tr>
+<tr><td>Fieldset/legend por pergunta, <code>aria-live</code> no erro/progresso, <code>aria-hidden</code> nos emojis</td><td>M1, B2</td><td>Médio</td><td>Alto</td></tr>
+<tr><td rowspan="3"><strong>3 · Produção</strong></td>
+  <td>Código de convite pseudonimizado no lugar do RG; deduplicação e timestamp no servidor</td><td>C3, A3, M5</td><td>Alto</td><td>Muito alto</td></tr>
+<tr><td>Checagem de duplicidade por hash (SHA-256 + sal) enquanto o RG existir</td><td>C3</td><td>Baixo</td><td>Alto</td></tr>
+<tr><td>T-scores PROMIS via tabela de conversão + validação metodológica dos itens 1, 2 e 6</td><td>M4</td><td>Médio</td><td>Alto</td></tr>
+</tbody>
+</table>
+</div>
+<p class="nota">Esforço estimado sobre o arquivo atual (HTML único + Apps Script). As ações da Fase 1 podem ser feitas em uma única sessão de edição sem alterar a estrutura de dados da planilha.</p>
+</section>
+
+<!-- ============ SNIPPETS ============ -->
+<h2>5. Trechos prontos para as correções da Fase 1</h2>
+<section class="card">
+<h3>5.1 · Escala acessível com fallback de seleção (C1 + C2)</h3>
+<pre><code>/* CSS — substitui .escala input{display:none} */
+.escala input{position:absolute;width:1px;height:1px;margin:-1px;opacity:0;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.escala label:focus-within{outline:3px solid var(--azul);outline-offset:2px}
+/* classe aplicada por JS — funciona sem :has() */
+.opcoes label.sel,.escala label.sel{border-color:var(--vinho);background:#fbf0f0;font-weight:bold}
+.escala label.sel{background:var(--vinho);color:#fff;border-color:var(--dourado)}
+
+// JS — fallback universal de seleção
+form.addEventListener('change',e=>{
+  if(e.target.type==='radio'){
+    form.querySelectorAll('[name="'+e.target.name+'"]').forEach(i=>
+      i.closest('label')?.classList.toggle('sel',i.checked));
+  }
+  if(e.target.type==='checkbox')
+    e.target.closest('label')?.classList.toggle('sel',e.target.checked);
+});</code></pre>
+
+<h3>5.2 · Validação da pergunta 21 no envio (A1)</h3>
+<pre><code>if(document.getElementById('blocoMotivosExames').style.display!=='none'
+   && !form.querySelector('[name="prem_exames_motivos"]:checked')){
+  showError('Indique ao menos um motivo que contribuiu para a pendência (pergunta 21).');
+  btn.disabled=false;btn.textContent='❤️ Enviar minhas respostas';return;
+}</code></pre>
+
+<h3>5.3 · Autosave em localStorage (A2)</h3>
+<pre><code>const CHAVE='heroi_rascunho_v1';
+function salvarRascunho(){
+  const dados={};new FormData(form).forEach((v,k)=>{
+    dados[k]=dados[k]?[].concat(dados[k],v):v});
+  localStorage.setItem(CHAVE,JSON.stringify(dados));
+}
+function restaurarRascunho(){
+  const raw=localStorage.getItem(CHAVE);if(!raw)return;
+  const dados=JSON.parse(raw);
+  Object.entries(dados).forEach(([k,v])=>{
+    [].concat(v).forEach(valor=>{
+      const el=form.querySelector('[name="'+k+'"][value="'+CSS.escape(valor)+'"]')
+             ||form.querySelector('[name="'+k+'"]:not([type=radio]):not([type=checkbox])');
+      if(!el)return;
+      if(el.type==='radio'||el.type==='checkbox')el.checked=true;else el.value=valor;
+    });
+  });
+  updateExamBlocks();updateTobacco();updatePeriod();updateProgress();
+}
+form.addEventListener('change',salvarRascunho);
+restaurarRascunho();
+// após envio confirmado: localStorage.removeItem(CHAVE);</code></pre>
+
+<h3>5.4 · Limites no campo de data + timestamp ISO (M2 + M6)</h3>
+<pre><code>// ao carregar a página
+const hoje=new Date().toISOString().slice(0,10);
+const dt=document.getElementById('dataInspecao');
+dt.max=hoje; dt.min='2025-01-01'; // ajustar ao início do programa
+
+// em buildPayload()
+payload.carimbo_iso=new Date().toISOString();
+payload.lgpd_versao_texto='consentimento-v1-2026-07';</code></pre>
+</section>
+
+<!-- ============ CONCLUSAO ============ -->
+<h2>6. Conclusão</h2>
+<section class="card">
+<p>O formulário está <strong>acima da média para um piloto</strong>: a arquitetura de envio com confirmação ativa, o versionamento do instrumento e a estratificação longitudinal automática são decisões maduras que muitos sistemas de coleta não têm. Nenhum achado exige redesenho — todos os pontos críticos e altos são corrigíveis dentro do próprio arquivo e do Apps Script existente.</p>
+<p>A recomendação é executar a <strong>Fase 1 antes de ampliar a aplicação</strong> (acessibilidade das escalas, fallback do <code>:has()</code>, validação da pergunta 21 e retry do pré-check), pois esses quatro itens afetam diretamente quem consegue responder e a completude do dado. As questões de privacidade do RG (C3) merecem tratamento já na transição piloto → produção, alinhadas ao plano — já declarado no próprio formulário — de migrar para código de convite pseudonimizado.</p>
+</section>
+
+</main>
+<footer><strong>Relatório de análise técnica</strong> · Formulário PROMIS Global Health / PREMs · Programa Coração de Herói — CBMERJ · Arquivo original mantido intacto</footer>
+</body>
+</html>

@@ -1,477 +1,634 @@
 <!DOCTYPE html>
-<!--
-═══════════════════════════════════════════════════════════════════════
-  DASHBOARD · PROGRAMA CORAÇÃO DE HERÓI · CBMERJ
-  Lê os dados do Google Sheets via doGet do Apps Script.
-  1. Cole a URL /exec do seu Apps Script no campo "URL da fonte de dados"
-     (ou na constante SCRIPT_URL abaixo) e clique em Atualizar.
-  2. Sem URL, o painel exibe DADOS DE DEMONSTRAÇÃO para visualização.
-═══════════════════════════════════════════════════════════════════════
--->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEV | Dashboard | Coração de Herói | CBMERJ</title>
+<title>Dashboard PROMIS Global | Coração de Herói</title>
 <style>
-  :root{
-    --vermelho-cbmerj:#C41E1E;--vinho:#8B1A1A;--vinho-escuro:#5E0F0F;
-    --dourado:#D4A017;--dourado-claro:#E8C468;--preto:#1A1A1A;
-    --off-white:#FAF7F2;--cinza-texto:#3A3A3A;--cinza-suave:#6B6B6B;
-    --azul-prem:#1A4E8B;--verde:#2E7D32;--amarelo:#E0A400;--vermelho-alerta:#C0392B;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;background:var(--off-white);color:var(--cinza-texto);line-height:1.55;}
-  .faixa-topo{background:linear-gradient(90deg,var(--preto),var(--vermelho-cbmerj),var(--preto));height:8px;}
-  .faixa-dourada{background:linear-gradient(90deg,var(--dourado),var(--dourado-claro),var(--dourado));height:3px;}
-
-  header{background:linear-gradient(135deg,var(--vinho-escuro) 0%,var(--vinho) 45%,var(--vermelho-cbmerj) 100%);color:#fff;padding:22px 20px;position:relative;overflow:hidden;}
-  header::before{content:'';position:absolute;right:-90px;top:-90px;width:340px;height:340px;border:2px solid rgba(212,160,23,.2);border-radius:50%;}
-  .header-conteudo{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:18px;position:relative;z-index:1;flex-wrap:wrap;}
-  .header-textos .instituicao{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dourado-claro);font-weight:600;}
-  .header-textos h1{font-size:1.5rem;font-weight:800;}
-  .header-textos h1 span{color:var(--dourado-claro);}
-  .header-textos .sub{font-size:.82rem;color:rgba(255,255,255,.85);}
-
-  .controles{max-width:1180px;margin:16px auto 0;padding:0 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
-  .controles input{flex:1;min-width:240px;padding:10px 12px;border:2px solid #E4D9C8;border-radius:10px;font-size:.85rem;background:#fff;}
-  .controles button{padding:10px 18px;background:var(--vinho);color:#fff;border:2px solid var(--dourado);border-radius:10px;font-weight:700;cursor:pointer;font-size:.85rem;}
-  .controles button:hover{background:var(--vermelho-cbmerj);}
-  .controles select{padding:10px 12px;border:2px solid #E4D9C8;border-radius:10px;font-size:.85rem;background:#fff;font-weight:600;color:var(--vinho-escuro);}
-  .status{font-size:.75rem;color:var(--cinza-suave);}
-
-  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
-
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px;}
-  .kpi{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 14px rgba(94,15,15,.1);border-top:4px solid var(--dourado);}
-  .kpi .rot{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--cinza-suave);font-weight:600;display:flex;align-items:center;gap:6px;}
-  .kpi .val{font-size:2rem;font-weight:800;color:var(--vinho);line-height:1.1;margin-top:4px;}
-  .kpi .delta{font-size:.75rem;font-weight:700;margin-top:2px;}
-  .kpi .up{color:var(--verde);}.kpi .down{color:var(--vermelho-alerta);}
-  .kpi.nps .val{color:var(--dourado);}
-  .kpi .barra-meta{height:6px;background:#Eee3d2;border-radius:99px;margin-top:8px;overflow:hidden;}
-  .kpi .barra-meta > div{height:100%;background:linear-gradient(90deg,var(--vinho),var(--dourado));border-radius:99px;}
-
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
-  @media(max-width:880px){.grid{grid-template-columns:1fr;}}
-  .card{background:#fff;border-radius:16px;padding:22px;box-shadow:0 4px 14px rgba(94,15,15,.08);border-top:5px solid var(--vinho);margin-bottom:18px;}
-  .card.azul{border-top-color:var(--azul-prem);}
-  .card.ouro{border-top-color:var(--dourado);}
-  .card h3{color:var(--vinho-escuro);font-size:1.02rem;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
-  .card .card-sub{font-size:.76rem;color:var(--cinza-suave);margin-bottom:16px;}
-  .card.azul h3{color:var(--azul-prem);}
-
-  .legenda-marcos{display:flex;gap:16px;flex-wrap:wrap;font-size:.75rem;margin-bottom:10px;}
-  .legenda-marcos span{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--cinza-texto);}
-  .dot{width:12px;height:12px;border-radius:3px;display:inline-block;}
-  .d90{background:#C9A24B;}.d180{background:var(--vermelho-cbmerj);}.d270{background:var(--vinho-escuro);}
-
-  /* Barras PROM */
-  .prom-item{margin-bottom:14px;}
-  .prom-item .nome{font-size:.82rem;font-weight:600;color:var(--cinza-texto);margin-bottom:5px;display:flex;justify-content:space-between;}
-  .prom-item .nome .melhora{font-size:.72rem;font-weight:700;}
-  .barras3{display:flex;flex-direction:column;gap:3px;}
-  .barra-linha{display:flex;align-items:center;gap:8px;}
-  .barra-linha .tag{font-size:.64rem;color:var(--cinza-suave);width:34px;font-weight:700;}
-  .barra-linha .track{flex:1;height:16px;background:#F1E9DC;border-radius:99px;overflow:hidden;}
-  .barra-linha .fill{height:100%;border-radius:99px;transition:width .6s;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;color:#fff;font-size:.62rem;font-weight:700;}
-  .fill90{background:#C9A24B;}.fill180{background:var(--vermelho-cbmerj);}.fill270{background:var(--vinho-escuro);}
-
-  /* Gauge NPS */
-  .nps-wrap{display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;}
-  .nps-numero{font-size:3.4rem;font-weight:800;color:var(--dourado);line-height:1;}
-  .nps-faixa{font-size:.8rem;font-weight:700;padding:4px 12px;border-radius:99px;display:inline-block;margin-top:6px;}
-  .nps-barras{flex:1;min-width:200px;}
-  .nps-b{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.78rem;}
-  .nps-b .lab{width:80px;font-weight:600;}
-  .nps-b .tr{flex:1;height:20px;background:#F1E9DC;border-radius:99px;overflow:hidden;}
-  .nps-b .fl{height:100%;border-radius:99px;color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;padding-left:8px;}
-
-  /* Tabela busca ativa */
-  table{width:100%;border-collapse:collapse;font-size:.8rem;}
-  th{background:var(--vinho);color:#fff;padding:9px 10px;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;}
-  th:first-child{border-radius:8px 0 0 0;}th:last-child{border-radius:0 8px 0 0;}
-  td{padding:9px 10px;border-bottom:1px solid #EFE6D8;}
-  tr:hover td{background:#FBF6EE;}
-  .badge{padding:2px 9px;border-radius:99px;font-size:.68rem;font-weight:700;color:#fff;}
-  .b-alto{background:var(--vermelho-alerta);}.b-medio{background:var(--amarelo);}.b-baixo{background:var(--verde);}
-
-  .radar-svg{width:100%;max-width:420px;margin:0 auto;display:block;}
-
-  footer{background:var(--vinho-escuro);color:rgba(255,255,255,.85);padding:22px;text-align:center;font-size:.8rem;}
-  footer .ld{width:70px;height:3px;background:var(--dourado);margin:0 auto 12px;border-radius:2px;}
-  footer strong{color:var(--dourado-claro);}
-  .demo-tag{display:inline-block;background:var(--amarelo);color:#4a3800;font-size:.68rem;font-weight:800;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;}
-  .dev-tag{display:inline-block;background:#F4C542;color:#4a3800;font-size:.68rem;font-weight:900;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;margin-left:8px;}
+:root{
+  --bg:#f4f5f7;--surface:#ffffff;--text:#25282c;--muted:#687078;--line:#dfe3e8;
+  --brand:#a4161a;--brand-dark:#671014;--gold:#b8890b;--blue:#1d5c96;--green:#287a4d;
+  --orange:#b45f18;--danger:#b42318;--gray:#78828c;
+  --m0:#1d5c96;--m90:#b8890b;--m180:#b42318;--m270:#671014;--mout:#78828c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",Arial,sans-serif}
+.topline{height:6px;background:var(--gold)}
+header{background:var(--brand-dark);color:#fff;padding:20px}
+.header-inner{max-width:1240px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.header-inner h1{font-size:1.45rem;margin:0;font-weight:700;letter-spacing:0}
+.header-inner p{margin:4px 0 0;color:#f2e7e7;font-size:.82rem}
+.source-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid #ffffff66;border-radius:999px;padding:6px 10px;font-size:.72rem;font-weight:700}
+.source-dot{width:8px;height:8px;border-radius:50%;background:#8bd6a6}
+.source-badge.demo .source-dot{background:#f4c95d}
+.toolbar{max-width:1240px;margin:0 auto;padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.filters strong{font-size:.72rem;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;margin-right:2px}
+.chip{border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:7px 11px;font:600 .78rem inherit;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+.chip:hover{border-color:var(--brand)}
+.status{font-size:.75rem;color:var(--muted)}
+main{max-width:1240px;margin:auto;padding:10px 20px 54px}
+.kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.kpi .label{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.kpi .value{font-size:1.75rem;line-height:1.1;font-weight:700;color:var(--brand-dark);margin-top:5px}
+.kpi .detail{font-size:.72rem;color:var(--muted);margin-top:4px}
+.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px;min-width:0}
+.panel.wide{grid-column:1/-1}
+.panel h2{font-size:1rem;margin:0;color:var(--brand-dark)}
+.panel h3{font-size:.78rem;margin:18px 0 8px;color:var(--text);text-transform:uppercase;letter-spacing:.04em}
+.panel-sub{font-size:.75rem;color:var(--muted);margin:4px 0 14px}
+.chart-svg{display:block;width:100%;height:auto;max-height:330px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0 0;color:var(--muted);font-size:.72rem}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.empty{padding:34px 12px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:6px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.bar-list{display:grid;gap:8px}
+.bar-row{display:grid;grid-template-columns:minmax(110px,1.25fr) minmax(110px,2fr) 52px;gap:8px;align-items:center;font-size:.76rem}
+.bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{height:14px;background:#edf0f2;border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--blue);border-radius:4px 0 0 4px}
+.bar-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.stack{height:30px;display:flex;border-radius:5px;overflow:hidden;background:#edf0f2}
+.stack span{height:100%;min-width:0}
+.stack-labels{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:9px;color:var(--muted);font-size:.7rem}
+.stack-labels span{display:inline-flex;gap:5px;align-items:center}
+.stack-labels i{width:9px;height:9px;border-radius:2px}
+.score-note{font-size:.7rem;color:var(--muted);margin-top:8px}
+.nps-box{display:flex;align-items:center;gap:22px;margin:8px 0 16px}
+.nps-number{font-size:3rem;line-height:1;font-weight:700;color:var(--gold);min-width:90px;text-align:center}
+.nps-caption{text-align:center;color:var(--muted);font-size:.72rem;margin-top:4px}
+.marker-counts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.marker-count{border-top:3px solid var(--line);padding-top:7px}
+.marker-count strong{display:block;font-size:1.15rem}
+.marker-count span{font-size:.7rem;color:var(--muted)}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.76rem}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
+.priority{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;color:#fff}
+.priority.high{background:var(--danger)}.priority.medium{background:var(--orange)}
+.auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px;text-align:center}
+.auth-gate h2{color:var(--brand-dark);margin:0 0 8px;font-size:1.1rem}
+.auth-gate p{color:var(--muted);font-size:.82rem;margin:0 0 14px}
+.auth-gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:10px}
+.auth-gate .actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.auth-gate button{border:0;border-radius:6px;padding:10px 16px;font:700 .8rem inherit;cursor:pointer}
+.auth-gate .primary{background:var(--brand);color:#fff}
+.auth-gate .ghost{background:#edf0f2;color:var(--text)}
+.auth-error{color:var(--danger);font-size:.75rem;min-height:16px;margin:0 0 10px}
+.logout{color:#f2e7e7;font-size:.7rem;text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;margin-left:8px;display:none}
+footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border-top:1px solid var(--line)}
+@media(max-width:1050px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:820px){.dashboard-grid{grid-template-columns:1fr}.panel.wide{grid-column:auto}.split{grid-template-columns:1fr}.marker-counts{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){header{padding:16px 14px}.toolbar,main{padding-left:12px;padding-right:12px}.kpi-grid{grid-template-columns:repeat(2,1fr)}.kpi .value{font-size:1.45rem}.panel{padding:14px}.bar-row{grid-template-columns:minmax(90px,1.15fr) minmax(80px,1.5fr) 44px}.header-inner h1{font-size:1.2rem}}
 </style>
 </head>
 <body>
-<div class="faixa-topo"></div>
-<div class="faixa-dourada"></div>
-
+<div class="topline"></div>
 <header>
-  <div class="header-conteudo">
-    <!-- Brasão CBMERJ compacto -->
-    <svg width="64" height="64" viewBox="0 0 200 200" aria-label="CBMERJ">
-      <defs><radialGradient id="mCB" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#F0F0F2"/><stop offset="55%" stop-color="#D6D6DA"/><stop offset="100%" stop-color="#AFAFB6"/></radialGradient></defs>
-      <circle cx="100" cy="100" r="99" fill="#111"/><circle cx="100" cy="100" r="90" fill="#C21E1E"/>
-      <circle cx="100" cy="100" r="63" fill="url(#mCB)" stroke="#111" stroke-width="2"/>
-      <g transform="translate(100,108)">
-        <g stroke="url(#mCB)" stroke-width="5.5" stroke-linecap="round"><line x1="-32" y1="-26" x2="26" y2="26"/><line x1="32" y1="-26" x2="-26" y2="26"/></g>
-        <path d="M -25,-30 L 25,-30 L 25,4 C 25,22 12,32 0,38 C -12,32 -25,22 -25,4 Z" fill="#C21E1E" stroke="url(#mCB)" stroke-width="3"/>
-        <path d="M 0,-19 L 4.6,-6.3 L 18,-6.3 L 7.2,1.5 L 11.3,14.3 L 0,6.6 L -11.3,14.3 L -7.2,1.5 L -18,-6.3 L -4.6,-6.3 Z" fill="#D4A017"/>
-        <g transform="translate(0,-52)"><rect x="-4.5" y="0" width="9" height="16" fill="url(#mCB)"/><rect x="-7" y="-3" width="14" height="6" rx="1.5" fill="#D4A017"/><path d="M 0,-30 C -7,-22 -6,-15 -8,-8 C -8,-2 -3,2 0,2 C 3,2 8,-2 8,-8 C 6,-15 7,-22 0,-30 Z" fill="#E8432E"/></g>
-      </g>
-    </svg>
-    <div class="header-textos">
-      <div class="instituicao">CBMERJ · Diretoria Geral de Saúde · 1ª Policlínica – Campinho</div>
-      <h1>Dashboard <span>Coração de Herói</span></h1>
-      <div class="sub">Painel VBHC · Desfechos (PROMs) · Experiência (PREMs) · NPS <span class="dev-tag">DEV / Homologação</span> <span id="demoTag"></span></div>
+  <div class="header-inner">
+    <div>
+      <h1>Programa Coração de Herói</h1>
+      <p>Dashboard longitudinal PROMIS Global Health, experiência, acesso e adesão</p>
     </div>
+    <div class="source-badge" id="sourceBadge"><span class="source-dot"></span><span id="sourceLabel">Carregando</span><button class="logout" id="logoutBtn" type="button">sair</button></div>
   </div>
 </header>
-
-<div class="controles">
-  <input id="urlFonte" placeholder="URL da fonte de dados DEV já configurada — deixe vazio para usar a constante SCRIPT_URL">
-  <select id="filtroMarco">
-    <option value="todos">Todos os marcos</option>
-    <option value="90 dias">90 dias</option>
-    <option value="180 dias">180 dias</option>
-    <option value="270 dias">270 dias</option>
-  </select>
-  <button onclick="carregar()">Atualizar</button>
-  <span class="status" id="statusMsg"></span>
-</div>
-
-<div class="wrap">
-
-  <!-- KPIs -->
-  <div class="kpis" id="kpis"></div>
-
-  <div class="grid">
-    <!-- PROMs -->
-    <div class="card">
-      <h3>❤️ Evolução dos PROMs por marco</h3>
-      <div class="card-sub">Percentual de respostas favoráveis em cada domínio · comparação 90 → 180 → 270 dias</div>
-      <div class="legenda-marcos">
-        <span><i class="dot d90"></i>90 dias</span>
-        <span><i class="dot d180"></i>180 dias</span>
-        <span><i class="dot d270"></i>270 dias</span>
-      </div>
-      <div id="promContainer"></div>
-    </div>
-
-    <!-- PREMs radar -->
-    <div class="card azul">
-      <h3>🤝 Experiência do paciente (PREMs)</h3>
-      <div class="card-sub">Índice médio por dimensão (0–100) · agregado do período filtrado</div>
-      <svg class="radar-svg" id="radarPrem" viewBox="0 0 400 340"></svg>
-    </div>
+<div class="toolbar">
+  <div class="filters" id="markerFilters" aria-label="Filtrar marcos do programa">
+    <strong>Marcos</strong>
+    <button class="chip" type="button" data-marker="Inicial" aria-pressed="true">Inicial</button>
+    <button class="chip" type="button" data-marker="90 dias" aria-pressed="true">90 dias</button>
+    <button class="chip" type="button" data-marker="180 dias" aria-pressed="true">180 dias</button>
+    <button class="chip" type="button" data-marker="270 dias" aria-pressed="true">270 dias</button>
+    <button class="chip" type="button" data-marker="Fora dos marcos" aria-pressed="false">Fora dos marcos</button>
   </div>
+  <div class="status" id="statusMsg"></div>
+</div>
+<main>
+  <section class="auth-gate" id="authGate" style="display:none" aria-label="Acesso restrito">
+    <h2>Acesso restrito</h2>
+    <p>Este painel exibe dados assistenciais do programa, incluindo sinais individuais para acompanhamento. Informe a chave de acesso fornecida pela coordenação.</p>
+    <p class="auth-error" id="authError"></p>
+    <input type="password" id="authInput" placeholder="Chave de acesso" autocomplete="off">
+    <div class="actions">
+      <button type="button" class="primary" id="authEnter">Entrar</button>
+      <button type="button" class="ghost" id="authDemo">Ver demonstração</button>
+    </div>
+  </section>
+  <section class="kpi-grid" id="kpis" aria-label="Indicadores principais"></section>
 
-  <div class="grid">
-    <!-- NPS -->
-    <div class="card ouro">
-      <h3>⭐ Net Promoter Score (NPS)</h3>
-      <div class="card-sub">NPS = % Promotores − % Detratores</div>
-      <div class="nps-wrap">
-        <div style="text-align:center">
-          <div class="nps-numero" id="npsNum">—</div>
-          <div class="nps-faixa" id="npsFaixa">—</div>
+  <div class="dashboard-grid">
+    <section class="panel wide">
+      <h2>Evolução do PROMIS Global Health</h2>
+      <p class="panel-sub">Média dos T-scores físico e mental por marco. Referência PROMIS: média 50; valores maiores representam melhor saúde.</p>
+      <div id="promisEvolution"></div>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i>Saúde física</span>
+        <span><i style="background:var(--gold)"></i>Saúde mental</span>
+        <span><i style="background:var(--gray)"></i>Referência 50</span>
+      </div>
+      <p class="score-note">T-scores estimados pela tabela de conversão do escore bruto. A redação local dos itens 1, 2 e 6 deve ser validada antes de comparações externas definitivas.</p>
+      <h3>Evolução pareada por participante</h3>
+      <div id="pairedDeltas"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Experiência essencial (PREMs)</h2>
+      <p class="panel-sub">Dimensões de 0 a 100, com camadas dos marcos selecionados e exclusão de respostas “não se aplica”.</p>
+      <div id="premRadar"></div>
+      <div class="legend" id="premLegend"></div>
+      <h3>Experiência favorável por profissional</h3>
+      <div id="professionalBars"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Jornada dos exames</h2>
+      <p class="panel-sub">Local de realização, exames pendentes e atribuição da principal barreira.</p>
+      <h3>Local de realização</h3>
+      <div id="examLocation"></div>
+      <h3>Exames pendentes mais citados</h3>
+      <div id="pendingExams"></div>
+      <h3>Origem percebida da pendência</h3>
+      <div id="examContribution"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Medicação e tabagismo</h2>
+      <p class="panel-sub">Indicadores operacionais de adesão, acesso e abordagem para cessação.</p>
+      <div class="split">
+        <div>
+          <h3>Adesão medicamentosa</h3>
+          <div id="medAdherence"></div>
+          <h3>Dificuldade principal</h3>
+          <div id="medDifficulty"></div>
         </div>
-        <div class="nps-barras" id="npsBarras"></div>
+        <div>
+          <h3>Situação de tabagismo</h3>
+          <div id="tobaccoStatus"></div>
+          <h3>Conduta entre fumantes atuais</h3>
+          <div id="tobaccoConduct"></div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Adesão / participação -->
-    <div class="card">
-      <h3>📊 Participação por marco</h3>
-      <div class="card-sub">Respostas recebidas vs. militares elegíveis em cada janela</div>
-      <div id="participacao"></div>
-    </div>
+    <section class="panel">
+      <h2>Recomendação do programa</h2>
+      <p class="panel-sub">Net Promoter Score e distribuição das respostas de 0 a 10.</p>
+      <div class="nps-box">
+        <div><div class="nps-number" id="npsValue">—</div><div class="nps-caption" id="npsBand">Sem dados</div></div>
+        <div style="flex:1" id="npsDistribution"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Participação por marco</h2>
+      <p class="panel-sub">Quantidade de respostas compatíveis com o formulário longitudinal.</p>
+      <div class="marker-counts" id="markerCounts"></div>
+      <div id="windowQuality" style="margin-top:16px"></div>
+    </section>
+
+    <section class="panel wide">
+      <h2>Sinais para acompanhamento assistencial</h2>
+      <p class="panel-sub">Triagem gerencial, não diagnóstica. Identificadores aparecem mascarados e exigem conferência na base restrita.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Identificador</th><th>Marco</th><th>T físico</th><th>T mental</th><th>Sinais encontrados</th><th>Prioridade</th></tr></thead>
+          <tbody id="followupRows"></tbody>
+        </table>
+      </div>
+      <p class="score-note" id="followupNote"></p>
+    </section>
   </div>
-
-  <!-- Busca ativa -->
-  <div class="card">
-    <h3>🚨 Busca ativa — militares com piora de desfechos</h3>
-    <div class="card-sub">Priorização para contato: sintomas frequentes, baixa aptidão, baixa adesão ou saúde autopercebida ≤ 4</div>
-    <div style="overflow-x:auto">
-      <table>
-        <thead><tr><th>RG</th><th>Marco</th><th>Saúde (0–10)</th><th>Sintomas</th><th>Aptidão</th><th>Adesão</th><th>Prioridade</th></tr></thead>
-        <tbody id="tabelaBusca"></tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-
-<footer>
-  <div class="ld"></div>
-  <strong>PROGRAMA CORAÇÃO DE HERÓI</strong> · Painel VBHC<br>
-  1ª Policlínica – Campinho · DGS · CBMERJ · Direção: Cel BM Ricardo de Souza Carvalho
-</footer>
+</main>
+<footer>PROMIS Global Health v1.2 · T-scores por conversão de escore bruto · Dados assistenciais devem permanecer em ambiente restrito</footer>
 
 <script>
-/* ═══ Cole aqui a URL /exec do Apps Script (opcional; o campo no topo tem prioridade) ═══ */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2kAbIU8QMkfJ_xchfl8NAf0mWrCbMoy_ifNjwoDB4zpj2e_UsL3_k1D_eDY4vsu4j/exec';
+const SCRIPT_URL='https://script.google.com/macros/s/AKfycbx2kAbIU8QMkfJ_xchfl8NAf0mWrCbMoy_ifNjwoDB4zpj2e_UsL3_k1D_eDY4vsu4j/exec';
+const MARKERS=[
+  {key:'Inicial',label:'Inicial',color:'#1d5c96'},
+  {key:'90 dias',label:'90 dias',color:'#b8890b'},
+  {key:'180 dias',label:'180 dias',color:'#b42318'},
+  {key:'270 dias',label:'270 dias',color:'#671014'}
+];
+const ACTIVE=new Set(MARKERS.map(function(m){return m.key;}));
+const TOKEN_KEY='dash_promis_chave';
+let DATA=[];
+let DEMO=false;
 
-const META_INSPECOES = 1000;
+/* ATENÇÃO: estas tabelas de conversão e a recodificação da dor também existem em index.html.
+   Qualquer alteração deve ser replicada lá (fonte única futura: agregação no Apps Script). */
+const PHYSICAL_T={4:16.2,5:19.9,6:23.5,7:26.7,8:29.6,9:32.4,10:34.9,11:37.4,12:39.8,13:42.3,14:44.9,15:47.7,16:50.8,17:54.1,18:57.7,19:61.9,20:67.7};
+const MENTAL_T={4:21.2,5:25.1,6:28.4,7:31.3,8:33.8,9:36.3,10:38.8,11:41.1,12:43.5,13:45.8,14:48.3,15:50.8,16:53.3,17:56.0,18:59.0,19:62.5,20:67.6};
 
-/* ---------- DADOS DE DEMONSTRAÇÃO ---------- */
-function gerarDemo(){
-  const marcos=['90 dias','180 dias','270 dias'];
-  const freq=['Nunca','Raramente','Algumas vezes','Frequentemente'];
-  const apt=['Totalmente apto','Apto com limitações leves','Apto com limitações importantes','Não me sinto apto'];
-  const ades=['Nunca / tomo corretamente','Raramente','Algumas vezes','Frequentemente','Não uso medicação'];
-  const rows=[];
-  let id=20000;
-  marcos.forEach((m,mi)=>{
-    const n=[42,34,26][mi]; // participação decrescente
-    for(let i=0;i<n;i++){
-      const base=5+mi*1.4; // melhora ao longo dos marcos
-      const saude=Math.max(0,Math.min(10,Math.round(base+ (Math.random()*4-2))));
-      const symBias=Math.max(0,2-mi); // menos sintomas nos marcos finais
+function num(v){const n=parseFloat(String(v==null?'':v).replace(',','.'));return Number.isFinite(n)?n:null;}
+function mean(values){const valid=values.filter(function(v){return Number.isFinite(v);});return valid.length?valid.reduce(function(a,b){return a+b;},0)/valid.length:null;}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function painRecoded(v){const n=num(v);if(n===null)return null;if(n===0)return 5;if(n<=3)return 4;if(n<=6)return 3;if(n<=9)return 2;return 1;}
+function rawPhysical(r){const stored=num(r.promis_global_fisica_bruto);if(stored!==null)return stored;const vals=[num(r.promis_global03),num(r.promis_global06),num(r.promis_global08),painRecoded(r.promis_global07)];return vals.every(Number.isFinite)?vals.reduce(function(a,b){return a+b;},0):null;}
+function rawMental(r){const stored=num(r.promis_global_mental_bruto);if(stored!==null)return stored;const vals=[num(r.promis_global02),num(r.promis_global04),num(r.promis_global05),num(r.promis_global10)];return vals.every(Number.isFinite)?vals.reduce(function(a,b){return a+b;},0):null;}
+function markerOf(r){
+  const windowOk=String(r.janela_aplicacao_recomendada||'').toLowerCase();
+  const raw=String(r.momento_avaliacao||r.marco_programa_bruto||r.marco_programa||'').toLowerCase();
+  if(windowOk==='não'||windowOk==='nao'||raw.includes('entre marcos')||raw.includes('após')||raw.includes('apos'))return 'Fora dos marcos';
+  if(raw.includes('inicial')||/^0\s*dias/.test(raw))return 'Inicial';
+  if(raw.includes('270')||/^270\s*dias/.test(raw))return '270 dias';
+  if(raw.includes('180')||/^180\s*dias/.test(raw))return '180 dias';
+  if(raw.includes('90')||/^90\s*dias/.test(raw))return '90 dias';
+  const code=num(r.marco_programa);
+  if(code===0)return 'Inicial';if(code===90)return '90 dias';if(code===180)return '180 dias';if(code===270)return '270 dias';
+  return 'Fora dos marcos';
+}
+function prepare(r){
+  const physicalRaw=rawPhysical(r),mentalRaw=rawMental(r);
+  const physicalStored=num(r.promis_global_fisica_tscore),mentalStored=num(r.promis_global_mental_tscore);
+  return Object.assign({},r,{
+    marker:markerOf(r),
+    physicalT:physicalStored!==null?physicalStored:PHYSICAL_T[Math.round(physicalRaw)],
+    mentalT:mentalStored!==null?mentalStored:MENTAL_T[Math.round(mentalRaw)]
+  });
+}
+function compatible(r){
+  return [r.promis_global01,r.promis_global_fisica_bruto,r.promis_global_mental_bruto]
+    .some(function(value){return String(value===undefined||value===null?'':value).trim()!=='';});
+}
+
+function seeded(seed){let x=seed>>>0;return function(){x=(1664525*x+1013904223)>>>0;return x/4294967296;};}
+function pick(arr,r){return arr[Math.min(arr.length-1,Math.floor(r()*arr.length))];}
+function generateDemo(){
+  const random=seeded(20260711),rows=[],plan=[['Inicial',38],['90 dias',37],['180 dias',36],['270 dias',34],['Fora dos marcos',4]];
+  const always=['Sempre','Na maioria das vezes','Às vezes','Raramente','Nunca'];
+  const coord=['Muito bem integrada','Bem integrada','Nem integrada nem desorganizada','Pouco integrada','Desorganizada'];
+  const professional=['Excelente','Boa','Regular','Ruim','Muito ruim','Não tive consulta ou não se aplica'];
+  const location=['Somente no CBMERJ','Somente fora do CBMERJ pelo SUS','Somente fora do CBMERJ por plano ou particular','Parte no CBMERJ e parte fora','Ainda não iniciei os exames'];
+  const exams=['ECOTT','Doppler','Ergometria','MAPA','HOLTER','Exames laboratoriais','ECC'];
+  plan.forEach(function(entry,mi){
+    const marker=entry[0],count=entry[1],progress=Math.min(mi,3);
+    for(let i=0;i<count;i++){
+      const q=clamp(Math.round(1.7+progress*.65+random()*2.2),1,5);
+      const pRaw=clamp(Math.round(10.5+progress*1.45+(random()-.5)*5),4,20);
+      const mRaw=clamp(Math.round(11.5+progress*.8+(random()-.5)*5),4,20);
+      const currentSmoker=random()<.08,exSmoker=!currentSmoker&&random()<.24;
+      const pendingChance=.72-progress*.13;
+      const pending=random()<pendingChance;
+      const nps=clamp(Math.round(6.2+progress*.7+(random()-.5)*4),0,10);
+      const local=pick(location,random);
+      const favorable=Math.max(0,Math.min(4,4-q));
       rows.push({
-        rg_cbmerj:(id++).toString(),
-        marco_programa:m,
-        prom_saude_geral:saude,
-        prom_evolucao_percebida: mi===0?'Igual':(Math.random()<.6?'Um pouco melhor':'Muito melhor'),
-        prom_dor_toracica:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
-        prom_dispneia:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
-        prom_palpitacoes:freq[Math.min(3,Math.floor(Math.random()*(2+symBias)))],
-        prom_aptidao_funcional:apt[Math.min(3,Math.floor(Math.random()*(3-mi>0?3-mi:1)+ (Math.random()<.15?1:0)))],
-        prom_adesao_medicacao:ades[Math.floor(Math.random()*(mi<1?4:3))],
-        prom_mudanca_habitos:['Mudei bastante','Mudei um pouco','Tentei, mas não mantive','Não mudei'][Math.floor(Math.random()*(mi>0?2:4))],
-        prem_agendamento:['Muito fácil','Fácil','Difícil'][Math.floor(Math.random()*3)],
-        prem_clareza_informacao:['Sempre','Na maioria das vezes','Às vezes'][Math.floor(Math.random()*2)],
-        prem_decisao_compartilhada:['Sempre','Na maioria das vezes','Às vezes'][Math.floor(Math.random()*2)],
-        prem_respeito:['Sempre','Na maioria das vezes'][Math.floor(Math.random()*2)],
-        prem_coordenacao_cuidado:['Muito bem integrada','Bem integrada','Pouco integrada'][Math.floor(Math.random()*2)],
-        prem_tempo_consulta:['Sempre suficiente','Quase sempre','Às vezes insuficiente'][Math.floor(Math.random()*2)],
-        nps_recomendacao: Math.max(0,Math.min(10,Math.round(7+mi*0.8+(Math.random()*4-2)))),
+        rg_cbmerj:'P'+String(i+1).padStart(4,'0'),
+        momento_avaliacao:marker,
+        janela_aplicacao_recomendada:marker==='Fora dos marcos'?'Não':'Sim',
+        marco_programa:marker==='Inicial'?'0 dias':marker,
+        promis_global_fisica_bruto:pRaw,
+        promis_global_mental_bruto:mRaw,
+        prem_clareza_informacao:always[favorable],
+        prem_decisao_compartilhada:always[Math.min(4,favorable+(random()<.2?1:0))],
+        prem_coordenacao_cuidado:coord[Math.min(4,favorable)],
+        prem_experiencia_nutricionista:professional[Math.min(5,favorable+(random()<.12?1:0))],
+        prem_experiencia_clinico:professional[Math.min(5,favorable)],
+        prem_experiencia_cardiologista:professional[Math.min(5,favorable+(random()<.18?1:0))],
+        prem_experiencia_endocrinologista:random()<.45?'Não tive consulta ou não se aplica':professional[Math.min(4,favorable)],
+        prem_exames_status:pending?pick(['Alguns pendentes, aguardando contato/orientação da equipe','Tentei agendar, mas não consegui vaga, canal ou autorização','Recebi orientação, mas adiei ou não priorizei'],random):'Todos concluídos ou equipe informou que não eram necessários',
+        prem_exames_local_realizacao:local,
+        prem_exames_pendentes:pending?pick(exams,random)+'; '+pick(exams,random):'',
+        prem_exames_motivos:pending?pick(['Dificuldade de contato, vaga ou autorização no CBMERJ','Dificuldade de contato, vaga ou autorização fora do CBMERJ','Adiei ou não priorizei','Horário, transporte, escala ou comparecimento'],random):'',
+        prem_exames_contribuicao:pending?pick(['Acesso ou organização do serviço de saúde','Dificuldade pessoal do participante','Ambos','Não consigo avaliar'],random):'',
+        prem_exames_tempo_espera:pending?pick(['8 a 30 dias','31 a 60 dias','Mais de 60 dias','Ainda pendente'],random):'Até 7 dias',
+        prem_agendamento_facilidade:pick(['Muito fácil','Fácil','Nem fácil nem difícil','Difícil','Muito difícil'],random),
+        prem_contato_resolucao:always[Math.min(4,favorable)],
+        prem_navegacao_respeito:always[Math.min(4,favorable)],
+        prem_confianca_equipe:clamp(Math.round(6.5+progress*.7+(random()-.5)*4),0,10),
+        contexto_medicacao_adesao:pick(progress>1?['Nenhuma','Nenhuma','Nenhuma','1 vez','2 a 3 vezes']:['Nenhuma','Nenhuma','1 vez','2 a 3 vezes','4 vezes ou mais'],random),
+        contexto_medicacao_dificuldade:pick(['Não tive dificuldade','Não tive dificuldade','Esquecimento ou dificuldade com a rotina','Falta na farmácia ou no serviço','Dificuldade para retirar ou obter','Efeito adverso ou receio da medicação'],random),
+        tabaco_status:currentSmoker?'Fumante atual':exSmoker?'Ex-fumante':'Nunca fumei',
+        tabaco_tempo_cessacao:exSmoker?pick(['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 20 anos'],random):'',
+        tabaco_abordagem:currentSmoker?pick(['Não fui abordado','Fui perguntado ou recebi orientação','Recebi orientação e oferta de tratamento'],random):'',
+        tabaco_conduta:currentSmoker?pick(['Não houve oferta de tratamento','Não me interessei','Tive interesse, mas não iniciei'],random):'',
+        nps_recomendacao:nps,
+        nps_classificacao:nps>=9?'Promotor':nps>=7?'Neutro':'Detrator'
       });
     }
   });
-  rows.forEach(r=>{ r.nps_classificacao = r.nps_recomendacao>=9?'Promotor':(r.nps_recomendacao>=7?'Neutro':'Detrator'); });
-  return rows;
+  return rows.map(prepare);
 }
 
-let DADOS=[];
-
-function jsonp(url, params){
-  return new Promise((resolve,reject)=>{
-    const callback='dash_cb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const sep=url.includes('?')?'&':'?';
-    const query=new URLSearchParams({...params, callback}).toString();
+function jsonp(url,params){
+  return new Promise(function(resolve,reject){
+    const cb='dash_promis_'+Date.now()+'_'+Math.floor(Math.random()*100000);
     const script=document.createElement('script');
-    const timer=setTimeout(()=>{ cleanup(); reject(new Error('Tempo esgotado ao carregar dados.')); },15000);
-    function cleanup(){ clearTimeout(timer); delete window[callback]; script.remove(); }
-    window[callback]=(data)=>{ cleanup(); resolve(data); };
-    script.onerror=()=>{ cleanup(); reject(new Error('Falha ao carregar dados via JSONP.')); };
-    script.src=url+sep+query;
+    const timer=setTimeout(function(){cleanup();reject(new Error('timeout'));},15000);
+    function cleanup(){clearTimeout(timer);delete window[cb];script.remove();}
+    window[cb]=function(data){cleanup();resolve(data);};
+    script.onerror=function(){cleanup();reject(new Error('network'));};
+    script.src=url+(url.includes('?')?'&':'?')+new URLSearchParams(Object.assign({},params,{callback:cb})).toString();
     document.body.appendChild(script);
   });
 }
-
-/* ---------- CARREGAMENTO ---------- */
-async function carregar(){
-  const url=(document.getElementById('urlFonte').value||SCRIPT_URL).trim();
-  const status=document.getElementById('statusMsg');
-  const demoTag=document.getElementById('demoTag');
-  if(!url){
-    DADOS=gerarDemo();
-    demoTag.innerHTML='<span class="demo-tag">Dados de demonstração</span>';
-    status.textContent='Exibindo dados fictícios. Cole a URL do Apps Script para dados reais.';
-    render();
-    return;
-  }
-  status.textContent='Carregando…'; demoTag.innerHTML='';
+function rowsFromSheet(raw){
+  if(!Array.isArray(raw)||!raw.length)return [];
+  const head=raw[0];
+  return raw.slice(1).map(function(row){const out={};head.forEach(function(h,i){if(h)out[h]=row[i];});return out;});
+}
+function showGate(message){
+  document.getElementById('authGate').style.display='block';
+  document.getElementById('authError').textContent=message||'';
+  document.getElementById('kpis').style.display='none';
+  document.querySelector('.dashboard-grid').style.display='none';
+  document.getElementById('statusMsg').textContent='';
+  setSource('Acesso restrito',false);
+  document.getElementById('authInput').focus();
+}
+function hideGate(){
+  document.getElementById('authGate').style.display='none';
+  document.getElementById('kpis').style.display='grid';
+  document.querySelector('.dashboard-grid').style.display='grid';
+}
+function enterDemo(note){
+  DATA=generateDemo();DEMO=true;
+  setSource('Demonstração · 149 respostas',true);
+  document.getElementById('statusMsg').textContent=note||'';
+  hideGate();render();
+}
+async function tryLoad(token){
+  setSource('Conectando…',false);
+  document.getElementById('statusMsg').textContent='Consultando a fonte de dados…';
   try{
-    const raw=await jsonp(url, {});
-    if(!Array.isArray(raw) || raw.length===0){
-      DADOS=[];
-      status.textContent='Fonte conectada, mas a planilha ainda não tem respostas.';
-      render();
+    const raw=await jsonp(SCRIPT_URL,{action:'data',token:token});
+    if(raw&&raw.error){
+      sessionStorage.removeItem(TOKEN_KEY);
+      showGate(raw.error==='unauthorized'?'Chave não autorizada. Confira com a coordenação do programa.':'A fonte recusou a consulta ('+raw.error+').');
       return;
     }
-    const head=raw[0];
-    DADOS=raw.slice(1).map(linha=>{ const o={}; head.forEach((h,i)=>o[h]=linha[i]); return o; });
-    status.textContent=DADOS.length+' respostas carregadas · '+new Date().toLocaleString('pt-BR');
-    render();
-  }catch(err){
-    status.textContent='Falha ao carregar. Reimplante o Apps Script e confirme acesso como Qualquer pessoa.';
+    /* Contrato estrito: só aceita {ok:true,values:[...]} do Code.gs novo.
+       Um array puro indica a implantação antiga (GET aberto) — rejeitar para não mascarar o vazamento. */
+    if(!raw||raw.ok!==true||!Array.isArray(raw.values)){
+      showGate('A fonte respondeu em formato antigo. Implante o Code.gs atualizado (apps-script/Code.gs) para habilitar o acesso autenticado.');
+      return;
+    }
+    const compatibleRows=rowsFromSheet(raw.values).filter(compatible);
+    if(!compatibleRows.length){enterDemo('Fonte conectada, ainda sem respostas compatíveis; exibindo simulação.');return;}
+    DATA=compatibleRows.map(prepare);DEMO=false;
+    setSource('Dados conectados',false);
+    document.getElementById('statusMsg').textContent=DATA.length+' respostas carregadas · '+new Date().toLocaleString('pt-BR');
+    hideGate();render();
+  }catch(e){
+    showGate('Fonte indisponível no momento. Tente novamente ou veja a demonstração.');
   }
 }
-
-/* ---------- UTILIDADES ---------- */
-function filtrar(){
-  const f=document.getElementById('filtroMarco').value;
-  return f==='todos'?DADOS:DADOS.filter(r=>r.marco_programa===f);
+function load(){
+  const forced=new URLSearchParams(location.search).get('demo');
+  if(forced!==null&&forced!=='0'&&forced!=='false'){enterDemo('Modo demonstração solicitado pela URL.');return;}
+  const token=sessionStorage.getItem(TOKEN_KEY);
+  if(!token){showGate('');return;}
+  tryLoad(token);
 }
-function pct(arr,cond){ if(!arr.length)return 0; return Math.round(arr.filter(cond).length/arr.length*100); }
-function media(arr,campo){ if(!arr.length)return 0; return (arr.reduce((s,r)=>s+(parseFloat(r[campo])||0),0)/arr.length); }
+function setSource(label,demo){
+  document.getElementById('sourceLabel').textContent=label;
+  document.getElementById('sourceBadge').classList.toggle('demo',demo);
+  document.getElementById('logoutBtn').style.display=(!demo&&label==='Dados conectados')?'inline':'none';
+}
+document.getElementById('authEnter').addEventListener('click',function(){
+  const token=document.getElementById('authInput').value.trim();
+  if(!token){document.getElementById('authError').textContent='Informe a chave de acesso.';return;}
+  sessionStorage.setItem(TOKEN_KEY,token);
+  tryLoad(token);
+});
+document.getElementById('authInput').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('authEnter').click();});
+document.getElementById('authDemo').addEventListener('click',function(){enterDemo('Demonstração aberta a partir da tela de acesso.');});
+document.getElementById('logoutBtn').addEventListener('click',function(){sessionStorage.removeItem(TOKEN_KEY);DATA=[];showGate('Sessão encerrada.');});
+function filtered(){return DATA.filter(function(r){return ACTIVE.has(r.marker);});}
+function markerData(marker){return DATA.filter(function(r){return r.marker===marker;});}
+function avgField(rows,field){return mean(rows.map(function(r){return num(r[field]);}));}
+function pct(rows,fn){return rows.length?Math.round(rows.filter(fn).length/rows.length*100):0;}
 
-/* ---------- RENDER ---------- */
+function scoreAlways(v){const map={'Sempre':100,'Na maioria das vezes':75,'Às vezes':50,'Raramente':25,'Nunca':0};return map[v]===undefined?null:map[v];}
+function scoreCoord(v){const map={'Muito bem integrada':100,'Bem integrada':75,'Nem integrada nem desorganizada':50,'Pouco integrada':25,'Desorganizada':0};return map[v]===undefined?null:map[v];}
+function scoreProfessional(v){const map={'Excelente':100,'Boa':75,'Regular':50,'Ruim':25,'Muito ruim':0};return map[v]===undefined?null:map[v];}
+function scoreEase(v){const map={'Muito fácil':100,'Fácil':75,'Nem fácil nem difícil':50,'Difícil':25,'Muito difícil':0};return map[v]===undefined?null:map[v];}
+function averageFns(r,fns){return mean(fns.map(function(fn){return fn(r);}));}
+
+const PREM_DIMS=[
+  {label:'Clareza',fn:function(r){return scoreAlways(r.prem_clareza_informacao);}},
+  {label:'Decisão',fn:function(r){return scoreAlways(r.prem_decisao_compartilhada);}},
+  {label:'Coordenação',fn:function(r){return scoreCoord(r.prem_coordenacao_cuidado);}},
+  {label:'Profissionais',fn:function(r){return mean(['prem_experiencia_nutricionista','prem_experiencia_clinico','prem_experiencia_cardiologista','prem_experiencia_endocrinologista'].map(function(f){return scoreProfessional(r[f]);}));}},
+  {label:'Navegação',fn:function(r){return averageFns(r,[function(x){return scoreEase(x.prem_agendamento_facilidade);},function(x){return scoreAlways(x.prem_contato_resolucao);}]);}},
+  {label:'Respeito e confiança',fn:function(r){return mean([scoreAlways(r.prem_navegacao_respeito),num(r.prem_confianca_equipe)!==null?num(r.prem_confianca_equipe)*10:null]);}}
+];
+
 function render(){
-  const dados=filtrar();
-  renderKPIs(dados);
-  renderPROMs();
-  renderRadar(dados);
-  renderNPS(dados);
-  renderParticipacao();
-  renderBusca(dados);
+  const rows=filtered();
+  renderKpis(rows);
+  renderPromis();
+  renderPrem(rows);
+  renderExams(rows);
+  renderMedication(rows);
+  renderNps(rows);
+  renderParticipation(rows);
+  renderPaired();
+  renderFollowup(rows);
 }
 
-function renderKPIs(d){
-  const saudeMedia=media(d,'prom_saude_geral').toFixed(1);
-  const aptos=pct(d,r=>r.prom_aptidao_funcional==='Totalmente apto');
-  const melhora=pct(d,r=>/melhor/i.test(r.prom_evolucao_percebida||''));
-  const nps=calcNPS(d);
-  const total=DADOS.length;
-  const metaPct=Math.min(100,Math.round(total/META_INSPECOES*100));
-  document.getElementById('kpis').innerHTML=`
-    <div class="kpi"><div class="rot">👥 Respostas totais</div><div class="val">${total}</div>
-      <div class="barra-meta"><div style="width:${metaPct}%"></div></div>
-      <div class="delta">${metaPct}% da meta de ${META_INSPECOES}</div></div>
-    <div class="kpi"><div class="rot">🩺 Saúde autopercebida</div><div class="val">${saudeMedia}</div><div class="delta">média 0–10 · filtro atual</div></div>
-    <div class="kpi"><div class="rot">🚒 Totalmente aptos</div><div class="val">${aptos}%</div><div class="delta">função operacional plena</div></div>
-    <div class="kpi"><div class="rot">📈 Relatam melhora</div><div class="val">${melhora}%</div><div class="delta">vs. ingresso no programa</div></div>
-    <div class="kpi nps"><div class="rot">⭐ NPS</div><div class="val">${nps>0?'+':''}${nps}</div><div class="delta">${faixaNPS(nps)}</div></div>`;
+function renderKpis(rows){
+  const physical=mean(rows.map(function(r){return r.physicalT;}));
+  const mental=mean(rows.map(function(r){return r.mentalT;}));
+  const unique=new Set(rows.map(function(r){return String(r.rg_cbmerj||'');}).filter(Boolean)).size;
+  const examRows=rows.filter(function(r){const s=String(r.prem_exames_status||'');return s!==''&&!s.startsWith('Não houve');});
+  const exams=pct(examRows,function(r){return String(r.prem_exames_status||'').startsWith('Todos concluídos');});
+  const adhRows=rows.filter(function(r){const v=String(r.contexto_medicacao_adesao||'');return v!==''&&v!=='Prefiro não responder';});
+  const adherent=pct(adhRows,function(r){return r.contexto_medicacao_adesao==='Nenhuma';});
+  const nps=calcNps(rows);
+  const items=[
+    ['Respostas',rows.length,'filtro atual'],
+    ['Participantes',unique,'identificadores únicos'],
+    ['T físico',physical===null?'—':physical.toFixed(1),'referência 50'],
+    ['T mental',mental===null?'—':mental.toFixed(1),'referência 50'],
+    ['Exames concluídos',exams+'%','ou não necessários · n='+examRows.length],
+    ['Adesão em 7 dias',adherent+'%','nenhuma dose omitida · n='+adhRows.length]
+  ];
+  document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div></article>';}).join('');
+  document.getElementById('npsValue').textContent=nps===null?'—':(nps>0?'+':'')+nps;
+  document.getElementById('npsBand').textContent=nps===null?'Sem dados':npsBand(nps)+' · n='+npsScores(rows).length;
 }
 
-/* PROMs: % favorável por domínio, nos 3 marcos */
-const PROM_DOMINIOS=[
-  {nome:'😊 Saúde geral ≥ 7',fn:r=>parseFloat(r.prom_saude_geral)>=7},
-  {nome:'💢 Sem dor torácica',fn:r=>r.prom_dor_toracica==='Nunca'},
-  {nome:'💨 Sem dispneia',fn:r=>r.prom_dispneia==='Nunca'},
-  {nome:'💓 Sem palpitações',fn:r=>r.prom_palpitacoes==='Nunca'},
-  {nome:'🚒 Totalmente apto',fn:r=>r.prom_aptidao_funcional==='Totalmente apto'},
-  {nome:'💊 Boa adesão',fn:r=>r.prom_adesao_medicacao==='Nunca / tomo corretamente'},
-  {nome:'🥗 Mudou hábitos',fn:r=>/Mudei/i.test(r.prom_mudanca_habitos||'')},
-];
-function renderPROMs(){
-  const marcos=['90 dias','180 dias','270 dias'];
-  const classe={'90 dias':'fill90','180 dias':'fill180','270 dias':'fill270'};
-  const tag={'90 dias':'90','180 dias':'180','270 dias':'270'};
-  let html='';
-  PROM_DOMINIOS.forEach(dom=>{
-    const vals=marcos.map(m=>{ const sub=DADOS.filter(r=>r.marco_programa===m); return pct(sub,dom.fn); });
-    const delta=vals[2]-vals[0];
-    const deltaTxt=DADOS.some(r=>r.marco_programa==='270 dias')&&DADOS.some(r=>r.marco_programa==='90 dias')
-      ? `<span class="melhora" style="color:${delta>=0?'var(--verde)':'var(--vermelho-alerta)'}">${delta>=0?'▲ +':'▼ '}${delta} pp</span>`:'';
-    html+=`<div class="prom-item"><div class="nome"><span>${dom.nome}</span>${deltaTxt}</div><div class="barras3">`;
-    marcos.forEach(m=>{ const v=vals[marcos.indexOf(m)];
-      html+=`<div class="barra-linha"><span class="tag">${tag[m]}d</span><div class="track"><div class="fill ${classe[m]}" style="width:${v}%">${v>12?v+'%':''}</div></div></div>`;
+function renderPromis(){
+  const selected=MARKERS.filter(function(m){return ACTIVE.has(m.key);});
+  if(!selected.length){document.getElementById('promisEvolution').innerHTML='<div class="empty">Selecione ao menos um marco principal.</div>';return;}
+  const W=820,H=300,L=58,R=28,T=24,B=46,plotW=W-L-R,plotH=H-T-B;
+  const x=function(index){return L+(MARKERS.length===1?0:plotW*index/(MARKERS.length-1));};
+  const y=function(value){return T+(70-clamp(value,30,70))/40*plotH;};
+  let svg='<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Evolução dos T-scores físico e mental por marco">';
+  [30,40,50,60,70].forEach(function(tick){const yy=y(tick);svg+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="'+(tick===50?'#78828c':'#dfe3e8')+'" stroke-width="'+(tick===50?1.6:1)+'"/><text x="'+(L-10)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="#687078">'+tick+'</text>';});
+  MARKERS.forEach(function(m,i){const n=markerData(m.key).length;svg+='<text x="'+x(i)+'" y="'+(H-17)+'" text-anchor="middle" font-size="11" fill="#687078">'+m.label+(ACTIVE.has(m.key)?' (n='+n+')':'')+'</text>';});
+  const physical=[],mental=[];
+  MARKERS.forEach(function(m,i){if(!ACTIVE.has(m.key))return;const rows=markerData(m.key);const pv=mean(rows.map(function(r){return r.physicalT;})),mv=mean(rows.map(function(r){return r.mentalT;}));if(pv!==null)physical.push([x(i),y(pv),pv,m]);if(mv!==null)mental.push([x(i),y(mv),mv,m]);});
+  function path(points){return points.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ');}
+  if(physical.length)svg+='<path d="'+path(physical)+'" fill="none" stroke="#1d5c96" stroke-width="3"/>';
+  if(mental.length)svg+='<path d="'+path(mental)+'" fill="none" stroke="#b8890b" stroke-width="3"/>';
+  physical.forEach(function(p){svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="5" fill="#1d5c96"/><text x="'+p[0]+'" y="'+(p[1]+18)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#1d5c96">'+p[2].toFixed(1)+'</text>';});
+  mental.forEach(function(p){svg+='<rect x="'+(p[0]-4.5)+'" y="'+(p[1]-4.5)+'" width="9" height="9" fill="#b8890b"/><text x="'+p[0]+'" y="'+(p[1]-10)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#8a6908">'+p[2].toFixed(1)+'</text>';});
+  svg+='</svg>';
+  document.getElementById('promisEvolution').innerHTML=svg;
+}
+
+function premValues(rows){return PREM_DIMS.map(function(dim){return mean(rows.map(dim.fn));});}
+function renderPrem(rows){
+  const series=MARKERS.filter(function(m){return ACTIVE.has(m.key);}).map(function(m){const mr=markerData(m.key);return {marker:m,values:premValues(mr),count:mr.length};}).filter(function(s){return s.count>0;});
+  const W=500,H=380,cx=250,cy=184,R=125,N=PREM_DIMS.length;
+  let svg='<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Radar das dimensões PREMs por marco">';
+  [25,50,75,100].forEach(function(level){let pts='';for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;pts+=(cx+R*level/100*Math.cos(a))+','+(cy+R*level/100*Math.sin(a))+' ';}svg+='<polygon points="'+pts+'" fill="none" stroke="#dfe3e8" stroke-width="1"/>';});
+  for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N,x=cx+R*Math.cos(a),yy=cy+R*Math.sin(a),lx=cx+(R+42)*Math.cos(a),ly=cy+(R+30)*Math.sin(a);svg+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+yy+'" stroke="#dfe3e8"/><text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="10.5" fill="#4b5158">'+PREM_DIMS[i].label+'</text>';}
+  series.forEach(function(s){
+    let pts='';const missing=[];
+    s.values.forEach(function(v,i){
+      if(v===null){missing.push(PREM_DIMS[i].label);return;}
+      const a=-Math.PI/2+i*2*Math.PI/N,f=v/100;
+      pts+=(cx+R*f*Math.cos(a))+','+(cy+R*f*Math.sin(a))+' ';
     });
-    html+='</div></div>';
+    s.missing=missing;
+    if(pts)svg+='<polygon points="'+pts+'" fill="'+s.marker.color+'22" stroke="'+s.marker.color+'" stroke-width="2.5"/>';
   });
-  document.getElementById('promContainer').innerHTML=html;
+  svg+='</svg>';
+  document.getElementById('premRadar').innerHTML=series.length?svg:'<div class="empty">Sem respostas PREM nos marcos selecionados.</div>';
+  document.getElementById('premLegend').innerHTML=series.map(function(s){const valid=s.values.filter(function(v){return v!==null;});const overall=valid.length?mean(valid):null;return '<span><i style="background:'+s.marker.color+'"></i>'+s.marker.label+': '+(overall===null?'—':Math.round(overall)+'%')+(s.missing&&s.missing.length?' · N/D: '+s.missing.join(', '):'')+'</span>';}).join('');
+  const professionals=[
+    ['Nutricionista','prem_experiencia_nutricionista'],
+    ['Clínico','prem_experiencia_clinico'],
+    ['Cardiologista','prem_experiencia_cardiologista'],
+    ['Endocrinologista','prem_experiencia_endocrinologista']
+  ];
+  renderBars('professionalBars',professionals.map(function(p){const score=mean(rows.map(function(r){return scoreProfessional(r[p[1]]);}));return {label:p[0],value:score===null?0:Math.round(score),suffix:'%'};}),100);
 }
 
-/* Radar PREMs */
-const PREM_DIM=[
-  {nome:'Agendamento',fn:r=>['Muito fácil','Fácil'].includes(r.prem_agendamento)},
-  {nome:'Clareza',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_clareza_informacao)},
-  {nome:'Decisão\ncompartilhada',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_decisao_compartilhada)},
-  {nome:'Respeito',fn:r=>['Sempre','Na maioria das vezes'].includes(r.prem_respeito)},
-  {nome:'Coordenação',fn:r=>['Muito bem integrada','Bem integrada'].includes(r.prem_coordenacao_cuidado)},
-  {nome:'Tempo de\nconsulta',fn:r=>['Sempre suficiente','Quase sempre'].includes(r.prem_tempo_consulta)},
-];
-function renderRadar(d){
-  const cx=200,cy=165,R=120,N=PREM_DIM.length;
-  const vals=PREM_DIM.map(dim=>pct(d,dim.fn));
-  let grid='';
-  [0.25,0.5,0.75,1].forEach(f=>{
-    let pts='';
-    for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;pts+=`${cx+R*f*Math.cos(a)},${cy+R*f*Math.sin(a)} `;}
-    grid+=`<polygon points="${pts}" fill="none" stroke="#E4D9C8" stroke-width="1"/>`;
+function countCategories(rows,field,normalize){
+  const counts={};
+  rows.forEach(function(r){const raw=r[field];if(raw===undefined||raw===null||raw==='')return;const key=normalize?normalize(raw):String(raw);if(!key)return;counts[key]=(counts[key]||0)+1;});
+  return Object.keys(counts).map(function(k){return {label:k,count:counts[k]};}).sort(function(a,b){return b.count-a.count;});
+}
+function renderBars(id,items,maxValue){
+  const max=maxValue||Math.max.apply(null,items.map(function(i){return i.value||i.count;} ).concat([1]));
+  if(!items.length){document.getElementById(id).innerHTML='<div class="empty">Sem dados no filtro atual.</div>';return;}
+  document.getElementById(id).innerHTML='<div class="bar-list">'+items.map(function(item){const value=item.value===undefined?item.count:item.value,pctValue=max?value/max*100:0;return '<div class="bar-row"><div class="bar-label">'+esc(item.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+clamp(pctValue,0,100)+'%"></div></div><div class="bar-value">'+value+(item.suffix||'')+'</div></div>';}).join('')+'</div>';
+}
+function locationLabel(v){
+  const s=String(v);if(s.includes('Somente no CBMERJ'))return 'CBMERJ';if(s.includes('SUS'))return 'Fora · SUS';if(s.includes('plano')||s.includes('particular'))return 'Fora · plano/particular';if(s.includes('Parte no CBMERJ'))return 'CBMERJ + externo';if(s.includes('Ainda não'))return 'Ainda não iniciou';return 'Não se aplica';
+}
+function renderExams(rows){
+  const loc=countCategories(rows,'prem_exames_local_realizacao',locationLabel);
+  renderBars('examLocation',loc.map(function(x){return {label:x.label,value:x.count,suffix:''};}));
+  const pending={};
+  rows.forEach(function(r){String(r.prem_exames_pendentes||'').split(';').map(function(x){return x.trim();}).filter(Boolean).forEach(function(x){pending[x]=(pending[x]||0)+1;});});
+  const top=Object.keys(pending).map(function(k){return {label:k,value:pending[k]};}).sort(function(a,b){return b.value-a.value;}).slice(0,7);
+  renderBars('pendingExams',top);
+  const contribution=countCategories(rows,'prem_exames_contribuicao',function(v){const s=String(v);if(s.includes('serviço'))return 'Serviço de saúde';if(s.includes('pessoal'))return 'Participante';if(s==='Ambos')return 'Ambos';return 'Não consegue avaliar';});
+  renderBars('examContribution',contribution.map(function(x){return {label:x.label,value:x.count};}));
+}
+
+function adherenceLabel(v){const s=String(v);if(s==='Nenhuma')return 'Nenhuma dose omitida';if(s==='1 vez')return '1 vez';if(s.includes('2 a 3'))return '2 a 3 vezes';if(s.includes('4'))return '4 vezes ou mais';return 'Prefere não responder';}
+function difficultyLabel(v){const s=String(v);if(s.includes('Não tive'))return 'Sem dificuldade';if(s.includes('Esquecimento'))return 'Esquecimento/rotina';if(s.includes('Efeito'))return 'Efeito adverso/receio';if(s.includes('Falta'))return 'Falta na farmácia/serviço';if(s.includes('retirar'))return 'Retirada/obtenção';if(s.includes('Custo'))return 'Custo';if(s.includes('compreendi'))return 'Orientação';return s||'Outro';}
+function renderMedication(rows){
+  const adh=countCategories(rows,'contexto_medicacao_adesao',adherenceLabel);
+  const diff=countCategories(rows,'contexto_medicacao_dificuldade',difficultyLabel);
+  renderBars('medAdherence',adh.map(function(x){return {label:x.label,value:x.count};}));
+  renderBars('medDifficulty',diff.map(function(x){return {label:x.label,value:x.count};}));
+  const tobacco=countCategories(rows,'tabaco_status');
+  renderBars('tobaccoStatus',tobacco.map(function(x){return {label:x.label,value:x.count};}));
+  const current=rows.filter(function(r){return r.tabaco_status==='Fumante atual';});
+  const conduct=countCategories(current,'tabaco_conduta');
+  renderBars('tobaccoConduct',conduct.map(function(x){return {label:x.label,value:x.count};}));
+}
+
+function npsScores(rows){return rows.map(function(r){return num(r.nps_recomendacao);}).filter(function(n){return n!==null;});}
+function calcNps(rows){
+  const scored=npsScores(rows);
+  if(!scored.length)return null;
+  const p=scored.filter(function(n){return n>=9;}).length,d=scored.filter(function(n){return n<=6;}).length;
+  return Math.round((p-d)/scored.length*100);
+}
+function npsBand(n){if(n>=75)return 'Excelência';if(n>=50)return 'Muito bom';if(n>=0)return 'Aperfeiçoar';return 'Crítico';}
+function renderNps(rows){
+  const scored=npsScores(rows),total=scored.length;
+  function share(fn){return total?Math.round(scored.filter(fn).length/total*100):0;}
+  const bands=[
+    {label:'Promotores',value:share(function(n){return n>=9;}),suffix:'%'},
+    {label:'Neutros',value:share(function(n){return n>=7&&n<=8;}),suffix:'%'},
+    {label:'Detratores',value:share(function(n){return n<=6;}),suffix:'%'}
+  ];
+  renderBars('npsDistribution',bands,100);
+}
+
+function renderParticipation(rows){
+  document.getElementById('markerCounts').innerHTML=MARKERS.map(function(m){const n=rows.filter(function(r){return r.marker===m.key;}).length;return '<div class="marker-count" style="border-color:'+m.color+'"><strong>'+n+'</strong><span>'+m.label+'</span></div>';}).join('');
+  /* Qualidade de aplicação calculada sobre TODAS as respostas compatíveis (DATA), independente do filtro,
+     para que respostas fora dos marcos não fiquem invisíveis quando o chip correspondente está desligado. */
+  const total=DATA.length,within=DATA.filter(function(r){return r.marker!=='Fora dos marcos';}).length,quality=total?Math.round(within/total*100):0;
+  document.getElementById('windowQuality').innerHTML='<div class="bar-row"><div class="bar-label">Dentro das janelas principais</div><div class="bar-track"><div class="bar-fill" style="width:'+quality+'%;background:var(--green)"></div></div><div class="bar-value">'+quality+'%</div></div><div class="score-note">'+(total-within)+' de '+total+' resposta(s) permanecem separadas como “fora dos marcos” (cálculo independente do filtro).</div>';
+}
+
+function pairedDeltas(){
+  const byId={};
+  DATA.forEach(function(r){
+    const id=String(r.rg_cbmerj||'').trim();
+    if(!id||r.marker==='Fora dos marcos')return;
+    if(!byId[id])byId[id]={};
+    if(!byId[id][r.marker])byId[id][r.marker]=r;
   });
-  let eixos='',labels='',area='';
-  for(let i=0;i<N;i++){
-    const a=-Math.PI/2+i*2*Math.PI/N;
-    const x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
-    eixos+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#E4D9C8" stroke-width="1"/>`;
-    const lx=cx+(R+22)*Math.cos(a),ly=cy+(R+22)*Math.sin(a);
-    PREM_DIM[i].nome.split('\n').forEach((ln,k)=>{
-      labels+=`<text x="${lx}" y="${ly+k*11}" font-size="9.5" font-weight="600" fill="#1A4E8B" text-anchor="middle">${ln}</text>`;
+  return ['90 dias','180 dias','270 dias'].map(function(marker){
+    const dPhysical=[],dMental=[];
+    Object.keys(byId).forEach(function(id){
+      const base=byId[id]['Inicial'],current=byId[id][marker];
+      if(!base||!current)return;
+      if(Number.isFinite(base.physicalT)&&Number.isFinite(current.physicalT))dPhysical.push(current.physicalT-base.physicalT);
+      if(Number.isFinite(base.mentalT)&&Number.isFinite(current.mentalT))dMental.push(current.mentalT-base.mentalT);
     });
+    return {marker:marker,n:Math.max(dPhysical.length,dMental.length),dPhysical:mean(dPhysical),dMental:mean(dMental)};
+  });
+}
+function renderPaired(){
+  const list=pairedDeltas();
+  if(!list.some(function(x){return x.n>0;})){
+    document.getElementById('pairedDeltas').innerHTML='<div class="empty">Ainda não há participantes com resposta no marco Inicial e em marcos seguintes.</div>';
+    return;
   }
-  let pts='';
-  for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;const f=vals[i]/100;pts+=`${cx+R*f*Math.cos(a)},${cy+R*f*Math.sin(a)} `;}
-  area=`<polygon points="${pts}" fill="rgba(26,78,139,.22)" stroke="#1A4E8B" stroke-width="2.5"/>`;
-  let dots='';
-  for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;const f=vals[i]/100;const x=cx+R*f*Math.cos(a),y=cy+R*f*Math.sin(a);
-    dots+=`<circle cx="${x}" cy="${y}" r="3.5" fill="#1A4E8B"/><text x="${x}" y="${y-7}" font-size="9" font-weight="800" fill="#5E0F0F" text-anchor="middle">${vals[i]}</text>`;}
-  document.getElementById('radarPrem').innerHTML=grid+eixos+labels+area+dots;
+  function fmt(v){return v===null?'—':(v>0?'+':'')+v.toFixed(1);}
+  document.getElementById('pairedDeltas').innerHTML='<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>Pares</th><th>Δ T físico</th><th>Δ T mental</th></tr></thead><tbody>'+list.map(function(x){return '<tr><td>Inicial → '+x.marker+'</td><td>'+x.n+'</td><td>'+fmt(x.dPhysical)+'</td><td>'+fmt(x.dMental)+'</td></tr>';}).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score considerando apenas o mesmo participante presente nos dois momentos — elimina o viés de composição entre ondas.</p>';
 }
 
-/* NPS */
-function calcNPS(d){
-  if(!d.length)return 0;
-  const p=d.filter(r=>parseInt(r.nps_recomendacao)>=9).length;
-  const det=d.filter(r=>parseInt(r.nps_recomendacao)<=6).length;
-  return Math.round((p-det)/d.length*100);
+function maskedId(v){const s=String(v||'');return s.length<=3?'•••'+s:'•••'+s.slice(-3);}
+function followupSignals(r){
+  const signals=[];let score=0;
+  if(Number.isFinite(r.physicalT)&&r.physicalT<40){signals.push('T físico < 40');score+=2;}
+  if(Number.isFinite(r.mentalT)&&r.mentalT<40){signals.push('T mental < 40');score+=2;}
+  if(r.contexto_medicacao_adesao==='4 vezes ou mais'){signals.push('adesão medicamentosa');score+=2;}
+  if(['Mais de 60 dias','Ainda pendente'].includes(r.prem_exames_tempo_espera)){signals.push('exame pendente prolongado');score+=2;}
+  if(String(r.prem_exames_status||'').includes('não consegui')){signals.push('barreira de acesso');score+=1;}
+  if(r.tabaco_status==='Fumante atual'&&['Não houve oferta de tratamento','Tive interesse, mas não iniciei'].includes(r.tabaco_conduta)){signals.push('cessação do tabagismo');score+=1;}
+  return {signals:signals,score:score};
 }
-function faixaNPS(n){ if(n>=75)return 'Excelência';if(n>=50)return 'Muito bom';if(n>=0)return 'Aperfeiçoar';return 'Crítico'; }
-function corNPS(n){ if(n>=50)return 'var(--verde)';if(n>=0)return 'var(--amarelo)';return 'var(--vermelho-alerta)'; }
-function renderNPS(d){
-  const nps=calcNPS(d);
-  document.getElementById('npsNum').textContent=(nps>0?'+':'')+nps;
-  const faixa=document.getElementById('npsFaixa');
-  faixa.textContent=faixaNPS(nps); faixa.style.background=corNPS(nps); faixa.style.color='#fff';
-  const tot=d.length||1;
-  const prom=Math.round(d.filter(r=>parseInt(r.nps_recomendacao)>=9).length/tot*100);
-  const neu=Math.round(d.filter(r=>{const v=parseInt(r.nps_recomendacao);return v>=7&&v<=8;}).length/tot*100);
-  const det=Math.round(d.filter(r=>parseInt(r.nps_recomendacao)<=6).length/tot*100);
-  document.getElementById('npsBarras').innerHTML=`
-    <div class="nps-b"><span class="lab">😍 Promotores</span><div class="tr"><div class="fl" style="width:${prom}%;background:var(--verde)">${prom>8?prom+'%':''}</div></div></div>
-    <div class="nps-b"><span class="lab">😐 Neutros</span><div class="tr"><div class="fl" style="width:${neu}%;background:var(--amarelo)">${neu>8?neu+'%':''}</div></div></div>
-    <div class="nps-b"><span class="lab">😞 Detratores</span><div class="tr"><div class="fl" style="width:${det}%;background:var(--vermelho-alerta)">${det>8?det+'%':''}</div></div></div>`;
+function renderFollowup(rows){
+  const all=rows.map(function(r){return {row:r,alert:followupSignals(r)};}).filter(function(x){return x.alert.score>=2;}).sort(function(a,b){return b.alert.score-a.alert.score;});
+  const list=all.slice(0,15);
+  const note=document.getElementById('followupNote');
+  if(!list.length){document.getElementById('followupRows').innerHTML='<tr><td colspan="6" class="empty">Nenhum sinal de acompanhamento no filtro atual.</td></tr>';note.textContent='';return;}
+  document.getElementById('followupRows').innerHTML=list.map(function(x){const high=x.alert.score>=4;return '<tr><td>'+esc(maskedId(x.row.rg_cbmerj))+'</td><td>'+esc(x.row.marker)+'</td><td>'+(Number.isFinite(x.row.physicalT)?x.row.physicalT.toFixed(1):'—')+'</td><td>'+(Number.isFinite(x.row.mentalT)?x.row.mentalT.toFixed(1):'—')+'</td><td>'+esc(x.alert.signals.join('; '))+'</td><td><span class="priority '+(high?'high':'medium')+'">'+(high?'ALTA':'MODERADA')+'</span></td></tr>';}).join('');
+  note.textContent=all.length>list.length?'Mostrando os '+list.length+' casos de maior prioridade de um total de '+all.length+' com sinais no filtro atual.':'Total: '+all.length+' caso(s) com sinais no filtro atual.';
 }
 
-/* Participação por marco */
-const ELEGIVEIS={'90 dias':115,'180 dias':115,'270 dias':115};
-function renderParticipacao(){
-  const marcos=['90 dias','180 dias','270 dias'];
-  const classe={'90 dias':'fill90','180 dias':'fill180','270 dias':'fill270'};
-  let html='';
-  marcos.forEach(m=>{
-    const n=DADOS.filter(r=>r.marco_programa===m).length;
-    const eleg=ELEGIVEIS[m];
-    const p=Math.min(100,Math.round(n/eleg*100));
-    html+=`<div class="prom-item"><div class="nome"><span>${m}</span><span class="melhora">${n} de ${eleg}</span></div>
-      <div class="barra-linha"><div class="track" style="height:20px"><div class="fill ${classe[m]}" style="width:${p}%">${p}%</div></div></div></div>`;
+document.querySelectorAll('.chip').forEach(function(button){
+  button.addEventListener('click',function(){
+    const key=button.dataset.marker,active=button.getAttribute('aria-pressed')==='true';
+    if(active&&ACTIVE.size===1)return;
+    button.setAttribute('aria-pressed',String(!active));
+    if(active)ACTIVE.delete(key);else ACTIVE.add(key);
+    render();
   });
-  document.getElementById('participacao').innerHTML=html;
-}
-
-/* Busca ativa */
-function prioridade(r){
-  let score=0;
-  if(parseFloat(r.prom_saude_geral)<=4)score+=2;
-  ['prom_dor_toracica','prom_dispneia','prom_palpitacoes'].forEach(c=>{ if(r[c]==='Frequentemente')score+=2; else if(r[c]==='Algumas vezes')score+=1; });
-  if(r.prom_aptidao_funcional==='Não me sinto apto')score+=3;
-  else if(r.prom_aptidao_funcional==='Apto com limitações importantes')score+=2;
-  if(r.prom_adesao_medicacao==='Frequentemente')score+=2;
-  else if(r.prom_adesao_medicacao==='Algumas vezes')score+=1;
-  if(/pior/i.test(r.prom_evolucao_percebida||''))score+=2;
-  return score;
-}
-function renderBusca(d){
-  const linhas=d.map(r=>({r,s:prioridade(r)})).filter(x=>x.s>=3).sort((a,b)=>b.s-a.s).slice(0,15);
-  const sintomas=r=>{const l=[];if(r.prom_dor_toracica!=='Nunca')l.push('dor');if(r.prom_dispneia!=='Nunca')l.push('dispneia');if(r.prom_palpitacoes!=='Nunca')l.push('palpitação');return l.join(', ')||'—';};
-  const badge=s=>s>=6?'<span class="badge b-alto">ALTA</span>':s>=4?'<span class="badge b-medio">MÉDIA</span>':'<span class="badge b-baixo">BAIXA</span>';
-  if(!linhas.length){document.getElementById('tabelaBusca').innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--verde);font-weight:600;padding:18px">✅ Nenhum militar em critério de busca ativa no filtro atual.</td></tr>';return;}
-  document.getElementById('tabelaBusca').innerHTML=linhas.map(({r,s})=>`
-    <tr><td><strong>${r.rg_cbmerj}</strong></td><td>${r.marco_programa}</td>
-    <td>${r.prom_saude_geral}</td><td>${sintomas(r)}</td>
-    <td>${(r.prom_aptidao_funcional||'').replace('Apto com l','L')}</td>
-    <td>${r.prom_adesao_medicacao==='Nunca / tomo corretamente'?'Boa':r.prom_adesao_medicacao}</td>
-    <td>${badge(s)}</td></tr>`).join('');
-}
-
-document.getElementById('filtroMarco').addEventListener('change',render);
-carregar();
+});
+load();
 </script>
 </body>
 </html>

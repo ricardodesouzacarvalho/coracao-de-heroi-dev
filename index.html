@@ -1,768 +1,431 @@
 <!DOCTYPE html>
-<!--
-═══════════════════════════════════════════════════════════════════════
-  PROGRAMA CORAÇÃO DE HERÓI · CBMERJ · 1ª POLICLÍNICA – CAMPINHO
-  Questionário PROMs + PREMs + NPS (modelo VBHC)
-  Chave primária: RG CBMERJ | Estratificação: 90 / 180 / 270 dias
-  ⚠️ TRAVA: 1 resposta por RG em cada marco (validada no servidor)
-═══════════════════════════════════════════════════════════════════════
-
-  ARQUIVO: index.html  →  publicar na RAIZ do repositório GitHub Pages
-
-  ARQUITETURA:
-  [index.html] → POST → [Google Apps Script] → [Google Sheets] → [dashboard.html]
-
-  ────────────────────────────────────────────────────────────────
-  PASSO 1 — CRIAR A PLANILHA
-  1. Crie uma planilha no Google Sheets: "Coração de Herói – PROMs PREMs"
-  2. Extensões → Apps Script → apague o conteúdo padrão → cole o código abaixo:
-  ────────────────────────────────────────────────────────────────
-
-  const SHEET_NAME = 'Respostas';
-
-  function doPost(e) {
-    const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
-    try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      let sheet = ss.getSheetByName(SHEET_NAME);
-      if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
-      const data = JSON.parse(e.postData.contents);
-
-      // ── TRAVA: 1 resposta por RG em cada marco (90/180/270) ──
-      const rg = String(data.rg_cbmerj || '').trim();
-      const marco = String(data.marco_programa || '').trim();
-
-      if (!rg || !marco) {
-        return ContentService.createTextOutput(JSON.stringify(
-          { ok:false, erro:'CAMPOS_OBRIGATORIOS', msg:'RG e marco do programa são obrigatórios.' }
-        )).setMimeType(ContentService.MimeType.JSON);
-      }
-
-      if (sheet.getLastRow() > 1) {
-        const head = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
-        const cRG = head.indexOf('rg_cbmerj');
-        const cMar = head.indexOf('marco_programa');
-        const linhas = sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getValues();
-        const existe = linhas.some(function(l){
-          return String(l[cRG]).trim() === rg && String(l[cMar]).trim() === marco;
-        });
-        if (existe) {
-          return ContentService.createTextOutput(JSON.stringify(
-            { ok:false, erro:'DUPLICADO', msg:'O RG ' + rg + ' já respondeu o marco de ' + marco + '.' }
-          )).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-
-      const keys = Object.keys(data);
-      if (sheet.getLastRow() === 0) {
-        sheet.appendRow(keys);
-        sheet.getRange(1,1,1,keys.length).setFontWeight('bold')
-          .setBackground('#8B1A1A').setFontColor('#FFFFFF');
-      }
-      sheet.appendRow(keys.map(function(k){ return data[k]; }));
-
-      return ContentService.createTextOutput(JSON.stringify({ ok:true }))
-        .setMimeType(ContentService.MimeType.JSON);
-    } finally {
-      lock.releaseLock();
-    }
-  }
-
-  function doGet() {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const values = sheet ? sheet.getDataRange().getValues() : [];
-    return ContentService.createTextOutput(JSON.stringify(values))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  ────────────────────────────────────────────────────────────────
-  PASSO 2 — IMPLANTAR O APPS SCRIPT
-  1. Implantar → Nova implantação → tipo: App da Web
-  2. Executar como: Você  |  Quem pode acessar: Qualquer pessoa
-  3. Autorize as permissões solicitadas (conta Google institucional)
-  4. Copie a URL gerada (termina em /exec)
-  5. Cole essa URL na constante SCRIPT_URL no <script> ao final DESTE arquivo
-     e também no dashboard.html
-  ────────────────────────────────────────────────────────────────
-  PASSO 3 — PUBLICAR NO GITHUB PAGES
-  1. github.com → New repository → nome: coracao-de-heroi → Public → Create
-  2. Add file → Upload files → envie este arquivo como "index.html"
-     e o outro artefato como "dashboard.html" → Commit changes
-  3. Settings → Pages → Branch: main → pasta: /(root) → Save
-  4. Link publicado em ~1 minuto:
-     Formulário: https://SEU-USUARIO.github.io/coracao-de-heroi/
-     Dashboard:  https://SEU-USUARIO.github.io/coracao-de-heroi/dashboard.html
-  ────────────────────────────────────────────────────────────────
-═══════════════════════════════════════════════════════════════════════
--->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEV | Coração de Herói | PROMs · PREMs · NPS | CBMERJ</title>
+<title>Piloto | Coração de Herói | PROMIS Global Health</title>
 <style>
-  :root{
-    --vermelho-cbmerj:#C41E1E;
-    --vinho:#8B1A1A;
-    --vinho-escuro:#5E0F0F;
-    --dourado:#D4A017;
-    --dourado-claro:#E8C468;
-    --prata:#C8C8D0;
-    --preto:#1A1A1A;
-    --off-white:#FAF7F2;
-    --cinza-texto:#3A3A3A;
-    --cinza-suave:#6B6B6B;
-    --verde-ok:#2E7D32;
-    --azul-prem:#1A4E8B;
-    --vermelho-erro:#C0392B;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;background:var(--off-white);color:var(--cinza-texto);line-height:1.6;}
-
-  .faixa-topo{background:linear-gradient(90deg,var(--preto),var(--vermelho-cbmerj),var(--preto));height:8px;}
-  .faixa-dourada{background:linear-gradient(90deg,var(--dourado),var(--dourado-claro),var(--dourado));height:3px;}
-  .ambiente-dev{display:inline-block;background:#F4C542;color:#4a3800;border-radius:999px;padding:4px 12px;font-size:.72rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-top:10px;border:1px solid rgba(0,0,0,.12);}
-
-  header{
-    background:linear-gradient(135deg,var(--vinho-escuro) 0%,var(--vinho) 45%,var(--vermelho-cbmerj) 100%);
-    color:#fff;padding:30px 20px;position:relative;overflow:hidden;
-  }
-  header::before{content:'';position:absolute;right:-90px;top:-90px;width:360px;height:360px;border:2px solid rgba(212,160,23,.22);border-radius:50%;}
-  .header-conteudo{max-width:900px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;text-align:center;position:relative;z-index:1;}
-  .logos{display:flex;gap:16px;align-items:center;}
-  .header-textos .instituicao{font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dourado-claro);font-weight:600;margin-bottom:4px;}
-  .header-textos h1{font-size:1.8rem;font-weight:800;line-height:1.15;text-shadow:0 2px 8px rgba(0,0,0,.35);}
-  .header-textos h1 span{color:var(--dourado-claro);}
-  .header-textos .subtitulo{margin-top:8px;font-size:.9rem;color:rgba(255,255,255,.9);font-weight:300;}
-
-  .container{max-width:760px;margin:0 auto;padding:28px 20px 60px;}
-
-  .intro{
-    background:#fff;border-radius:16px;padding:24px;margin-bottom:26px;
-    box-shadow:0 6px 20px rgba(94,15,15,.1);border-left:6px solid var(--dourado);
-  }
-  .intro h2{color:var(--vinho-escuro);font-size:1.15rem;margin-bottom:8px;}
-  .intro p{font-size:.92rem;}
-
-  .aviso-erro{
-    display:none;background:#FDECEA;border:2px solid var(--vermelho-erro);color:#7A1F16;
-    border-radius:14px;padding:18px 20px;margin-bottom:22px;font-size:.92rem;font-weight:600;
-    align-items:center;gap:10px;
-  }
-  .aviso-erro.mostrar{display:flex;}
-  .aviso-erro .icone{font-size:1.4rem;}
-
-  .progresso{position:sticky;top:0;z-index:10;background:var(--off-white);padding:12px 0;}
-  .barra-progresso{height:10px;background:#E8DFD2;border-radius:999px;overflow:hidden;}
-  .barra-progresso .preenchido{height:100%;width:0%;background:linear-gradient(90deg,var(--vinho),var(--dourado));border-radius:999px;transition:width .4s ease;}
-  .progresso .texto{font-size:.75rem;color:var(--cinza-suave);text-align:right;margin-top:4px;font-weight:600;}
-
-  fieldset{
-    border:none;background:#fff;border-radius:16px;padding:26px;margin-bottom:24px;
-    box-shadow:0 4px 14px rgba(94,15,15,.08);border-top:5px solid var(--vinho);
-  }
-  legend{
-    background:linear-gradient(135deg,var(--vinho),var(--vermelho-cbmerj));
-    color:#fff;font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;
-    padding:8px 20px;border-radius:999px;border:2px solid var(--dourado);
-  }
-  fieldset.prem{border-top-color:var(--azul-prem);}
-  fieldset.prem legend{background:linear-gradient(135deg,var(--azul-prem),#2A6BB8);border-color:var(--dourado);}
-  fieldset.nps{border-top-color:var(--dourado);}
-  fieldset.nps legend{background:linear-gradient(135deg,var(--dourado),#B8890F);border-color:var(--vinho);}
-
-  .bloco-titulo{
-    font-size:.8rem;color:var(--cinza-suave);margin-top:14px;font-style:italic;
-    padding-bottom:10px;border-bottom:1px dashed #EADFD0;
-  }
-
-  .campo{margin-top:20px;}
-  label{display:block;font-weight:700;color:var(--vinho-escuro);font-size:.92rem;margin-bottom:6px;}
-  fieldset.prem .campo > label{color:var(--azul-prem);}
-  input[type=text],select,textarea{
-    width:100%;padding:12px 14px;border:2px solid #E4D9C8;border-radius:10px;
-    font-size:.95rem;font-family:inherit;background:#FDFCFA;transition:border-color .2s;
-  }
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--dourado);}
-  textarea{min-height:80px;resize:vertical;}
-  .dica{font-size:.76rem;color:var(--cinza-suave);margin-top:4px;font-style:italic;}
-
-  .opcoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
-  .opcoes label{
-    display:flex;align-items:center;gap:8px;font-weight:500;color:var(--cinza-texto);
-    background:#FDFCFA;border:2px solid #E4D9C8;border-radius:10px;padding:9px 14px;
-    cursor:pointer;transition:all .2s;font-size:.86rem;margin:0;
-  }
-  .opcoes input{accent-color:var(--vinho);}
-  .opcoes label:has(input:checked){border-color:var(--vinho);background:#FBF0F0;color:var(--vinho-escuro);font-weight:700;}
-  fieldset.prem .opcoes label:has(input:checked){border-color:var(--azul-prem);background:#EEF4FB;color:var(--azul-prem);}
-
-  .escala{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;}
-  .escala label{
-    width:42px;height:42px;display:flex;align-items:center;justify-content:center;
-    border:2px solid #E4D9C8;border-radius:10px;cursor:pointer;font-weight:700;
-    background:#FDFCFA;transition:all .2s;margin:0;color:var(--cinza-texto);font-size:.9rem;
-  }
-  .escala input{display:none;}
-  .escala label:has(input:checked){background:var(--vinho);color:var(--dourado-claro);border-color:var(--dourado);transform:scale(1.08);}
-  .escala-legenda{display:flex;justify-content:space-between;font-size:.72rem;color:var(--cinza-suave);margin-top:4px;}
-
-  .escala-nps label:has(input:checked){background:var(--dourado);color:var(--vinho-escuro);border-color:var(--vinho);}
-
-  .marco-opcoes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px;}
-  .marco-opcoes label{
-    text-align:center;padding:16px 10px;border:2px solid #E4D9C8;border-radius:12px;
-    cursor:pointer;background:#FDFCFA;transition:all .2s;margin:0;display:block;
-  }
-  .marco-opcoes input{display:none;}
-  .marco-opcoes .dias{font-size:1.5rem;font-weight:800;color:var(--vinho);display:block;}
-  .marco-opcoes .desc{font-size:.72rem;color:var(--cinza-suave);text-transform:uppercase;letter-spacing:.04em;}
-  .marco-opcoes label:has(input:checked){border-color:var(--dourado);background:linear-gradient(135deg,#FBF0F0,#FDF3DC);box-shadow:0 4px 12px rgba(139,26,26,.15);}
-  @media(max-width:480px){.marco-opcoes{grid-template-columns:1fr;}}
-
-  .btn-enviar{
-    width:100%;padding:18px;font-size:1.05rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
-    background:linear-gradient(135deg,var(--vinho-escuro),var(--vermelho-cbmerj));
-    color:#fff;border:2px solid var(--dourado);border-radius:14px;cursor:pointer;
-    box-shadow:0 8px 24px rgba(94,15,15,.3);transition:all .2s;font-family:inherit;
-  }
-  .btn-enviar:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(94,15,15,.4);}
-  .btn-enviar:disabled{opacity:.6;cursor:wait;transform:none;}
-
-  .tela-sucesso{
-    display:none;text-align:center;background:#fff;border-radius:18px;padding:50px 30px;
-    box-shadow:0 10px 30px rgba(94,15,15,.15);border-top:6px solid var(--verde-ok);
-  }
-  .tela-sucesso .icone{font-size:4rem;margin-bottom:16px;}
-  .tela-sucesso h2{color:var(--vinho-escuro);margin-bottom:12px;}
-  .tela-sucesso p{color:var(--cinza-suave);}
-  .tela-sucesso .lema{margin-top:20px;font-style:italic;color:var(--dourado);font-weight:700;}
-
-  footer{background:var(--vinho-escuro);color:rgba(255,255,255,.85);padding:26px 20px;text-align:center;font-size:.82rem;}
-  footer .linha-dourada{width:80px;height:3px;background:var(--dourado);margin:0 auto 14px;border-radius:2px;}
-  footer strong{color:var(--dourado-claro);}
-  footer .lema{margin-top:8px;font-style:italic;color:rgba(255,255,255,.6);font-size:.78rem;}
-  .lgpd{font-size:.72rem;color:var(--cinza-suave);text-align:center;margin-top:14px;}
+:root{--vinho:#761515;--escuro:#4e0b0b;--vermelho:#c41e1e;--dourado:#d4a017;--fundo:#faf7f2;--texto:#343434;--muted:#6b6b6b;--azul:#1a4e8b;--erro:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 Arial,sans-serif}.topo{height:8px;background:linear-gradient(90deg,#171717,var(--vermelho),#171717)}header{padding:28px 20px;background:linear-gradient(135deg,var(--escuro),var(--vermelho));color:#fff;text-align:center}header h1{margin:0;font-size:1.7rem}header h1 span{color:#f3d27b}header p{margin:8px 0 0}.dev{display:inline-block;margin-top:12px;padding:4px 12px;border-radius:999px;background:#f4c542;color:#4a3800;font-size:.72rem;font-weight:bold;letter-spacing:.08em;text-transform:uppercase}.container{max-width:820px;margin:auto;padding:24px 18px 54px}.intro,.aviso,.erro,fieldset,.sucesso{background:#fff;border-radius:14px;box-shadow:0 4px 14px #5e0f0f14}.intro{padding:20px;margin-bottom:18px;border-left:5px solid var(--dourado)}.intro h2{margin:0 0 6px;color:var(--escuro);font-size:1.1rem}.intro p{margin:6px 0;font-size:.93rem}.aviso{padding:15px 18px;margin-bottom:18px;border:2px solid #e0a400;background:#fff8e1;font-size:.88rem}.erro{display:none;padding:16px;margin-bottom:18px;border:2px solid var(--erro);color:#7a1f16;background:#fdecea;font-weight:bold}.erro.mostrar{display:block}.progresso{position:sticky;top:0;z-index:4;padding:10px 0;background:var(--fundo)}.barra{height:9px;overflow:hidden;border-radius:99px;background:#e8dfd2}.barra div{height:100%;width:0;background:linear-gradient(90deg,var(--vinho),var(--dourado));transition:width .3s}.progresso p{margin:3px 0 0;text-align:right;font-size:.75rem;color:var(--muted)}fieldset{border:0;border-top:5px solid var(--vinho);padding:24px;margin:0 0 22px}fieldset.prem{border-top-color:var(--azul)}fieldset.nps{border-top-color:var(--dourado)}legend{padding:7px 17px;border:2px solid var(--dourado);border-radius:999px;background:var(--vinho);color:#fff;font-size:.9rem;font-weight:bold;letter-spacing:.04em}fieldset.prem legend{background:var(--azul)}fieldset.nps legend{background:#b8890f}.bloco{margin:2px 0 14px;padding-bottom:8px;border-bottom:1px dashed #eadfd0;color:var(--muted);font-size:.82rem;font-style:italic}.campo{margin-top:18px}.campo>label{display:block;margin-bottom:6px;color:var(--escuro);font-weight:bold;font-size:.92rem}fieldset.prem .campo>label{color:var(--azul)}input[type=text],input[type=date],textarea{width:100%;padding:11px 13px;border:2px solid #e4d9c8;border-radius:9px;background:#fdfcfa;font:inherit}textarea{min-height:74px;resize:vertical}input:focus,textarea:focus{outline:none;border-color:var(--dourado)}.dica{margin:4px 0 0;color:var(--muted);font-size:.75rem;font-style:italic}.opcoes{display:flex;flex-wrap:wrap;gap:8px}.opcoes label{display:flex;align-items:center;gap:7px;margin:0;padding:8px 12px;border:2px solid #e4d9c8;border-radius:9px;background:#fdfcfa;font-size:.85rem;cursor:pointer}.opcoes label:has(input:checked){border-color:var(--vinho);background:#fbf0f0;color:var(--escuro);font-weight:bold}fieldset.prem .opcoes label:has(input:checked){border-color:var(--azul);background:#eef4fb;color:var(--azul)}.escala{display:flex;flex-wrap:wrap;gap:5px}.escala label{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:2px solid #e4d9c8;border-radius:9px;background:#fdfcfa;cursor:pointer;font-weight:bold}.escala input{display:none}.escala label:has(input:checked){background:var(--vinho);border-color:var(--dourado);color:#fff}.escala-nps label:has(input:checked){background:#b8890f}.escala-legenda{display:flex;justify-content:space-between;color:var(--muted);font-size:.72rem}.periodo{padding:11px 13px;border:2px solid #e0a400;border-radius:9px;background:#fff8e1;color:#5f4300;font-weight:bold}.consentimento{display:flex;gap:9px;align-items:flex-start;margin:8px 0 16px;font-size:.82rem}.consentimento label{font-weight:600}.btn{width:100%;padding:16px;border:2px solid var(--dourado);border-radius:12px;background:linear-gradient(135deg,var(--escuro),var(--vermelho));color:#fff;font:800 1rem Arial;cursor:pointer}.btn:disabled{opacity:.6;cursor:wait}.lgpd{color:var(--muted);font-size:.75rem;text-align:center}.sucesso{display:none;text-align:center;padding:42px 20px}.sucesso h2{color:var(--vinho)}.nova{padding:12px 18px;border:0;border-radius:9px;background:var(--vinho);color:#fff;font-weight:bold;cursor:pointer}footer{padding:24px;text-align:center;background:#211313;color:#fff;font-size:.8rem;border-top:3px solid var(--dourado)}
+@media(max-width:520px){header h1{font-size:1.35rem}.container{padding:18px 12px 40px}fieldset{padding:19px 15px}.opcoes label{width:100%}.escala label{width:34px;height:34px}}
+</style>
+<style>
+.opcoes label.sel{border-color:var(--vinho);background:#fbf0f0;color:var(--escuro);font-weight:bold}
+fieldset.prem .opcoes label.sel{border-color:var(--azul);background:#eef4fb;color:var(--azul)}
+.escala input{display:block;position:absolute;width:1px;height:1px;margin:-1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.escala label:focus-within{outline:3px solid var(--azul);outline-offset:2px}
+.escala label.sel{background:var(--vinho);border-color:var(--dourado);color:#fff}
+.escala-nps label.sel{background:#b8890f}
 </style>
 </head>
 <body>
+<div class="topo"></div>
+<header><h1>PROGRAMA <span>CORAÇÃO DE HERÓI</span></h1><p>Questionário PROMIS Global Health e PREMs de acesso · Modelo VBHC</p><div class="dev">Piloto / homologação</div></header>
+<main class="container">
+<div class="intro"><h2><span aria-hidden="true">❤️ </span>Sua voz mede o valor do cuidado</h2><p>Esta versão acompanha a saúde percebida no início do programa e nos marcos de <strong>90, 180 e 270 dias</strong> após a Inspeção de Saúde. Respostas fora dessas janelas são aceitas, mas ficam identificadas para análise separada.</p><p class="dica">Cada RG responde uma vez por marco calculado. Não há respostas certas ou erradas.</p><p class="dica" id="rascunhoAviso" style="display:none">Há um rascunho local deste preenchimento. Os identificadores não são salvos no rascunho.</p></div>
+<div class="aviso"><strong>Atenção:</strong> este questionário não substitui atendimento. Em caso de dor forte ou persistente no peito, falta de ar importante, desmaio ou piora súbita, procure atendimento imediatamente.</div>
+<div class="erro" id="avisoErro" role="alert" aria-live="assertive"><span id="avisoErroTexto"></span></div>
+<div class="progresso"><div class="barra"><div id="barraPreenchido"></div></div><p id="txtProgresso" aria-live="polite">0% preenchido</p></div>
+<form id="formHeroi">
+<fieldset><legend><span aria-hidden="true">🪖 </span>Identificação e janela de aplicação</legend>
+<div class="campo"><label for="rgCbmerj"><span aria-hidden="true">🪪 </span>RG CBMERJ * <span style="font-weight:normal;color:var(--muted);font-size:.78rem">(compatibilidade com a planilha atual)</span></label><input type="text" name="rg_cbmerj" id="rgCbmerj" required inputmode="numeric" pattern="[0-9.\-]{3,15}" maxlength="15" autocomplete="off" placeholder="Somente números"><p class="dica">Na produção, recomendamos migrar para um código de convite pseudonimizado. Nesta versão, o RG é mantido para não romper a integração existente.</p></div>
+<div class="campo"><label for="rgCbmerjConfirmacao">Confirme o RG CBMERJ *</label><input type="text" name="rg_cbmerj_confirmacao" id="rgCbmerjConfirmacao" required inputmode="numeric" pattern="[0-9.\-]{3,15}" maxlength="15" autocomplete="off" placeholder="Digite novamente o RG"><p class="dica">A confirmação reduz erros de pareamento longitudinal e não é enviada para a planilha.</p></div>
+<div class="campo"><label><span aria-hidden="true">📅 </span>Data da sua Inspeção de Saúde *</label><input type="date" name="data_inspecao" id="dataInspecao" required><p class="dica">O sistema calcula os dias desde a Inspeção e identifica o marco recomendado.</p></div>
+<input type="hidden" name="marco_programa" id="marcoPrograma"><input type="hidden" name="marco_programa_bruto" id="marcoProgramaBruto"><input type="hidden" name="dias_desde_inspecao" id="diasDesdeInspecao"><input type="hidden" name="momento_avaliacao" id="momentoAvaliacao"><input type="hidden" name="estrato_dias" id="estratoDias"><input type="hidden" name="janela_aplicacao_recomendada" id="janelaAplicacao">
+<div class="campo"><label>Período calculado</label><div class="periodo" id="periodoCalculado">Informe a data da Inspeção de Saúde.</div></div>
+</fieldset>
+<fieldset><legend><span aria-hidden="true">❤️ </span>PROMIS Global Health — saúde percebida</legend><p class="bloco">Versão baseada no PROMIS Global Health em português. Responda pensando nos últimos 7 dias, salvo quando indicado.</p>
+<div class="campo"><label>1. De modo geral, como está a sua saúde? *</label><div class="opcoes promis-opcoes" data-promis="global01"></div></div>
+<div class="campo"><label>2. De modo geral, como está a sua qualidade de vida? *</label><div class="opcoes promis-opcoes" data-promis="global02"></div></div>
+<div class="campo"><label>3. De modo geral, como você classificaria a sua saúde física? *</label><div class="opcoes promis-opcoes" data-promis="global03"></div></div>
+<div class="campo"><label>4. De modo geral, como você classificaria a sua saúde mental, incluindo seu humor e sua capacidade de raciocínio? *</label><div class="opcoes promis-opcoes" data-promis="global04"></div></div>
+<div class="campo"><label>5. De modo geral, como você classificaria a sua satisfação com as atividades sociais e com relacionamentos? *</label><div class="opcoes promis-opcoes" data-promis="global05"></div></div>
+<div class="campo"><label>6. Até que ponto você consegue realizar atividades físicas diárias como andar, subir escadas, carregar peso ou arrastar um objeto pesado? *</label><div class="opcoes promis-opcoes" data-promis="global06"></div></div>
+<div class="campo"><label>7. Em média, como você classificaria as suas dores? *</label><div class="escala" data-nome="promis_global07"></div><div class="escala-legenda"><span>0 = Sem dor</span><span>10 = Pior dor imaginável</span></div></div>
+<div class="campo"><label>8. Em média, como você classificaria o seu cansaço? *</label><div class="opcoes promis-opcoes" data-promis="global08"></div></div>
+<div class="campo"><label>9. De modo geral, classifique a forma como consegue desempenhar as suas atividades e funções sociais frequentes, incluindo atividades em casa, no trabalho e na comunidade. *</label><div class="opcoes promis-opcoes" data-promis="global09"></div></div>
+<div class="campo"><label>10. Com que frequência você se sentiu incomodado(a) por problemas emocionais como sentir-se ansioso(a), deprimido(a) ou irritado(a)? *</label><div class="opcoes promis-opcoes" data-promis="global10"></div></div>
+<p class="dica">Versão para revisão: os itens 1, 2 e 6 receberam adaptações locais de redação. Antes da aplicação definitiva, essas mudanças devem ser confirmadas metodologicamente, pois a comparabilidade estrita exige os itens validados sem alteração.</p>
+</fieldset>
+<fieldset class="prem"><legend><span aria-hidden="true">🤝 </span>PREMs — experiência e navegação</legend>
+<p class="bloco">Bloco reduzido para medir comunicação, decisão compartilhada, coordenação, experiência profissional e barreiras na realização dos exames.</p>
+<p class="bloco"><strong>Experiência essencial com o programa</strong></p>
+<div class="campo"><label>11. A equipe explicou seus resultados e seu plano de cuidado de forma clara e compreensível? *</label><div class="opcoes"><label><input type="radio" name="prem_clareza_informacao" value="Sempre" required> Sempre</label><label><input type="radio" name="prem_clareza_informacao" value="Na maioria das vezes"> Na maioria das vezes</label><label><input type="radio" name="prem_clareza_informacao" value="Às vezes"> Às vezes</label><label><input type="radio" name="prem_clareza_informacao" value="Raramente"> Raramente</label><label><input type="radio" name="prem_clareza_informacao" value="Nunca"> Nunca</label><label><input type="radio" name="prem_clareza_informacao" value="Não tive contato ou não se aplica"> Não tive contato/não se aplica</label></div></div>
+<div class="campo"><label>12. Você se sentiu envolvido nas decisões sobre o seu tratamento? *</label><div class="opcoes"><label><input type="radio" name="prem_decisao_compartilhada" value="Sempre" required> Sempre</label><label><input type="radio" name="prem_decisao_compartilhada" value="Na maioria das vezes"> Na maioria das vezes</label><label><input type="radio" name="prem_decisao_compartilhada" value="Às vezes"> Às vezes</label><label><input type="radio" name="prem_decisao_compartilhada" value="Raramente"> Raramente</label><label><input type="radio" name="prem_decisao_compartilhada" value="Nunca"> Nunca</label><label><input type="radio" name="prem_decisao_compartilhada" value="Não houve decisão a tomar ou não se aplica"> Não houve decisão/não se aplica</label></div></div>
+<div class="campo"><label>13. A coordenação do seu cuidado (exames, resultados, retorno e seguimento) funcionou de forma integrada? *</label><div class="opcoes"><label><input type="radio" name="prem_coordenacao_cuidado" value="Muito bem integrada" required> Muito bem integrada</label><label><input type="radio" name="prem_coordenacao_cuidado" value="Bem integrada"> Bem integrada</label><label><input type="radio" name="prem_coordenacao_cuidado" value="Nem integrada nem desorganizada"> Nem integrada nem desorganizada</label><label><input type="radio" name="prem_coordenacao_cuidado" value="Pouco integrada"> Pouco integrada</label><label><input type="radio" name="prem_coordenacao_cuidado" value="Desorganizada"> Desorganizada</label><label><input type="radio" name="prem_coordenacao_cuidado" value="Ainda não se aplica"> Ainda não se aplica</label></div></div>
 
-<div class="faixa-topo"></div>
-<div class="faixa-dourada"></div>
+<p class="bloco"><strong>Experiência com os profissionais</strong></p>
+<div class="campo"><label>14. Como foi sua experiência com o(a) nutricionista do programa? *</label><div class="opcoes"><label><input type="radio" name="prem_experiencia_nutricionista" value="Excelente" required> Excelente</label><label><input type="radio" name="prem_experiencia_nutricionista" value="Boa"> Boa</label><label><input type="radio" name="prem_experiencia_nutricionista" value="Regular"> Regular</label><label><input type="radio" name="prem_experiencia_nutricionista" value="Ruim"> Ruim</label><label><input type="radio" name="prem_experiencia_nutricionista" value="Muito ruim"> Muito ruim</label><label><input type="radio" name="prem_experiencia_nutricionista" value="Não tive consulta ou não se aplica"> Não tive consulta/não se aplica</label></div></div>
+<div class="campo"><label>15. Como foi sua experiência com o(a) clínico(a) do programa? *</label><div class="opcoes"><label><input type="radio" name="prem_experiencia_clinico" value="Excelente" required> Excelente</label><label><input type="radio" name="prem_experiencia_clinico" value="Boa"> Boa</label><label><input type="radio" name="prem_experiencia_clinico" value="Regular"> Regular</label><label><input type="radio" name="prem_experiencia_clinico" value="Ruim"> Ruim</label><label><input type="radio" name="prem_experiencia_clinico" value="Muito ruim"> Muito ruim</label><label><input type="radio" name="prem_experiencia_clinico" value="Não tive consulta ou não se aplica"> Não tive consulta/não se aplica</label></div></div>
+<div class="campo"><label>16. Como foi sua experiência com o(a) cardiologista? *</label><div class="opcoes"><label><input type="radio" name="prem_experiencia_cardiologista" value="Excelente" required> Excelente</label><label><input type="radio" name="prem_experiencia_cardiologista" value="Boa"> Boa</label><label><input type="radio" name="prem_experiencia_cardiologista" value="Regular"> Regular</label><label><input type="radio" name="prem_experiencia_cardiologista" value="Ruim"> Ruim</label><label><input type="radio" name="prem_experiencia_cardiologista" value="Muito ruim"> Muito ruim</label><label><input type="radio" name="prem_experiencia_cardiologista" value="Não tive consulta ou não se aplica"> Não tive consulta/não se aplica</label></div></div>
+<div class="campo"><label>17. Como foi sua experiência com o(a) endocrinologista? *</label><div class="opcoes"><label><input type="radio" name="prem_experiencia_endocrinologista" value="Excelente" required> Excelente</label><label><input type="radio" name="prem_experiencia_endocrinologista" value="Boa"> Boa</label><label><input type="radio" name="prem_experiencia_endocrinologista" value="Regular"> Regular</label><label><input type="radio" name="prem_experiencia_endocrinologista" value="Ruim"> Ruim</label><label><input type="radio" name="prem_experiencia_endocrinologista" value="Muito ruim"> Muito ruim</label><label><input type="radio" name="prem_experiencia_endocrinologista" value="Não tive consulta ou não se aplica"> Não tive consulta/não se aplica</label></div></div>
 
-<header>
-  <div class="header-conteudo">
-    <div class="logos">
-      <!-- Brasão CBMERJ (recriação SVG fiel ao selo oficial) -->
-      <svg width="96" height="96" viewBox="0 0 200 200" role="img" aria-label="Brasão CBMERJ">
-        <defs>
-          <path id="cbSup" d="M 100,100 m -85,0 a 85,85 0 1,1 170,0"/>
-          <path id="cbInf" d="M 100,100 m -85,0 a 85,85 0 1,0 170,0"/>
-          <radialGradient id="metalCB" cx="35%" cy="30%" r="75%">
-            <stop offset="0%" stop-color="#F0F0F2"/><stop offset="55%" stop-color="#D6D6DA"/><stop offset="100%" stop-color="#AFAFB6"/>
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="99" fill="#111111"/>
-        <circle cx="100" cy="100" r="94" fill="#0F0F0F"/>
-        <circle cx="100" cy="100" r="90" fill="#C21E1E"/>
-        <circle cx="100" cy="100" r="90" fill="none" stroke="#111" stroke-width="2"/>
-        <text font-size="10.3" font-weight="700" fill="#FFF" letter-spacing="1.1" font-family="Arial, sans-serif">
-          <textPath href="#cbSup" startOffset="50%" text-anchor="middle">CORPO DE BOMBEIROS MILITAR DO ESTADO</textPath>
-        </text>
-        <text font-size="10.8" font-weight="700" fill="#FFF" letter-spacing="2.4" font-family="Arial, sans-serif">
-          <textPath href="#cbInf" startOffset="50%" text-anchor="middle">DO RIO DE JANEIRO · 1856</textPath>
-        </text>
-        <circle cx="100" cy="100" r="63" fill="url(#metalCB)" stroke="#111" stroke-width="2"/>
-        <g transform="translate(100,108)">
-          <g stroke="url(#metalCB)" stroke-width="5" stroke-linecap="round">
-            <line x1="-38" y1="30" x2="16" y2="-24"/>
-            <line x1="38" y1="30" x2="-16" y2="-24"/>
-          </g>
-          <g fill="#D4A017" stroke="#9C7510" stroke-width="0.5">
-            <circle cx="-38" cy="30" r="6"/><circle cx="38" cy="30" r="6"/>
-            <rect x="-44" y="26" width="12" height="5" rx="1.5"/><rect x="32" y="26" width="12" height="5" rx="1.5"/>
-          </g>
-          <g stroke="url(#metalCB)" stroke-width="5.5" stroke-linecap="round">
-            <line x1="-32" y1="-26" x2="26" y2="26"/>
-            <line x1="32" y1="-26" x2="-26" y2="26"/>
-          </g>
-          <g fill="url(#metalCB)" stroke="#7C7C82" stroke-width="1">
-            <path d="M -46,-38 C -34,-46 -22,-42 -20,-30 C -19,-24 -24,-19 -29,-21 L -40,-27 Z"/>
-            <path d="M 46,-38 C 34,-46 22,-42 20,-30 C 19,-24 24,-19 29,-21 L 40,-27 Z"/>
-          </g>
-          <path d="M -25,-30 L 25,-30 L 25,4 C 25,22 12,32 0,38 C -12,32 -25,22 -25,4 Z" fill="#C21E1E" stroke="url(#metalCB)" stroke-width="3"/>
-          <g fill="#D4A017" stroke="#9C7510" stroke-width="0.6">
-            <path d="M 0,-19 L 4.6,-6.3 L 18,-6.3 L 7.2,1.5 L 11.3,14.3 L 0,6.6 L -11.3,14.3 L -7.2,1.5 L -18,-6.3 L -4.6,-6.3 Z"/>
-          </g>
-          <g transform="translate(0,-52)">
-            <rect x="-4.5" y="0" width="9" height="16" fill="url(#metalCB)" stroke="#7C7C82" stroke-width="0.6"/>
-            <rect x="-7" y="-3" width="14" height="6" rx="1.5" fill="#D4A017"/>
-            <path d="M 0,-30 C -7,-22 -6,-15 -8,-8 C -8,-2 -3,2 0,2 C 3,2 8,-2 8,-8 C 6,-15 7,-22 0,-30 Z" fill="#E8432E"/>
-            <path d="M 0,-24 C -4,-18 -3,-13 -4,-8 C -4,-4 -1,-1 0,-1 C 2,-1 5,-4 5,-8 C 4,-13 4,-18 0,-24 Z" fill="#F4913E"/>
-          </g>
-        </g>
-      </svg>
-      <!-- Brasão 1ª Policlínica – Campinho (recriação SVG fiel ao original) -->
-      <svg width="96" height="96" viewBox="0 0 200 200" role="img" aria-label="Brasão 1ª Policlínica – Campinho">
-        <defs>
-          <path id="plSup" d="M 100,100 m -84,0 a 84,84 0 1,1 168,0"/>
-          <path id="plInf" d="M 100,100 m -84,0 a 84,84 0 1,0 168,0"/>
-          <linearGradient id="vinhoAnel" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#9A2323"/><stop offset="55%" stop-color="#7A1414"/><stop offset="100%" stop-color="#5E0F0F"/>
-          </linearGradient>
-          <radialGradient id="metalPL" cx="35%" cy="30%" r="75%">
-            <stop offset="0%" stop-color="#EDEDF0"/><stop offset="60%" stop-color="#C7C7CE"/><stop offset="100%" stop-color="#9E9EA6"/>
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="98" fill="url(#vinhoAnel)" stroke="#4A0C0C" stroke-width="2"/>
-        <circle cx="100" cy="100" r="73" fill="#FFFFFF"/>
-        <circle cx="100" cy="100" r="73" fill="none" stroke="#E4D9C8" stroke-width="1"/>
-        <text font-size="13.6" font-weight="800" fill="#FFF" letter-spacing="1.3" font-family="Arial, sans-serif">
-          <textPath href="#plSup" startOffset="50%" text-anchor="middle">1ª POLICLÍNICA - CAMPINHO</textPath>
-        </text>
-        <text font-size="14.5" font-weight="800" fill="#FFF" letter-spacing="3.5" font-family="Arial, sans-serif">
-          <textPath href="#plInf" startOffset="50%" text-anchor="middle">CBMERJ</textPath>
-        </text>
-        <text x="21" y="153" font-size="12" fill="#F0DDB8">★</text>
-        <text x="171" y="153" font-size="12" fill="#F0DDB8">★</text>
-        <g transform="translate(100,102)">
-          <rect x="-26" y="-58" width="52" height="116" rx="6" fill="#7A1414" stroke="#FFFFFF" stroke-width="2"/>
-          <rect x="-22" y="-54" width="44" height="108" rx="4" fill="none" stroke="#FFFFFF" stroke-width="1" opacity=".55"/>
-          <g fill="#7A1414" stroke="#FFFFFF" stroke-width="2.5">
-            <rect x="-12.5" y="-52" width="25" height="104" rx="3"/>
-            <rect x="-12.5" y="-52" width="25" height="104" rx="3" transform="rotate(60)"/>
-            <rect x="-12.5" y="-52" width="25" height="104" rx="3" transform="rotate(-60)"/>
-          </g>
-          <g stroke="url(#metalPL)" stroke-width="4" stroke-linecap="round">
-            <line x1="-33" y1="-21" x2="33" y2="21"/><line x1="33" y1="-21" x2="-33" y2="21"/>
-          </g>
-          <g fill="url(#metalPL)" stroke="#8E8E98" stroke-width="0.8">
-            <path d="M -40,-30 C -33,-35 -25,-33 -23,-25 L -30,-19 C -35,-21 -39,-25 -40,-30 Z"/>
-            <path d="M 40,-30 C 33,-35 25,-33 23,-25 L 30,-19 C 35,-21 39,-25 40,-30 Z"/>
-          </g>
-          <rect x="-3.6" y="-47" width="7.2" height="94" rx="3" fill="url(#metalPL)" stroke="#8E8E98" stroke-width="0.8"/>
-          <rect x="-6.5" y="-51" width="13" height="9" rx="3" fill="#9E9EA6"/>
-          <path d="M 13,-27 C 13,-17 -15,-15 -15,-3 C -15,9 15,9 15,21 C 15,29 -4,33 -11,37"
-                fill="none" stroke="#D4A017" stroke-width="7.5" stroke-linecap="round"/>
-          <path d="M 13,-27 C 13,-17 -15,-15 -15,-3 C -15,9 15,9 15,21 C 15,29 -4,33 -11,37"
-                fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linecap="round" opacity=".6"/>
-          <circle cx="13" cy="-27" r="5.5" fill="#D4A017" stroke="#9C7510" stroke-width="0.6"/>
-          <circle cx="11.6" cy="-29" r="1.2" fill="#3A2A00"/>
-        </g>
-      </svg>
-    </div>
-    <div class="header-textos">
-      <div class="instituicao">CBMERJ · Diretoria Geral de Saúde · 1ª Policlínica – Campinho</div>
-      <h1>PROGRAMA <span>CORAÇÃO DE HERÓI</span></h1>
-      <p class="subtitulo">Questionário de Desfechos e Experiência do Paciente · PROMs & PREMs · Modelo VBHC</p>
-      <div class="ambiente-dev">Ambiente DEV / Homologação</div>
-    </div>
-  </div>
-</header>
-
-<div class="container">
-
-  <div class="intro">
-    <h2>🧪 Ambiente de teste — não usar para respostas reais</h2>
-    <p><strong>Esta versão grava na planilha de desenvolvimento.</strong> Use somente para testar alterações no formulário, no Apps Script e no dashboard.</p>
-  </div>
-
-  <div class="intro">
-    <h2>❤️ Sua voz mede o valor do cuidado</h2>
-    <p>Este questionário leva cerca de <strong>5 minutos</strong> e é respondido em três marcos do programa: <strong>90, 180 e 270 dias</strong>. Suas respostas medem os resultados que realmente importam para você (PROMs) e a qualidade da sua experiência com a equipe (PREMs). Não existem respostas certas ou erradas — apenas a sua percepção sincera.</p>
-    <p class="dica">⚠️ Cada RG pode responder apenas <strong>uma vez</strong> em cada marco (90, 180 ou 270 dias).</p>
-  </div>
-
-  <div class="aviso-erro" id="avisoErro">
-    <span class="icone">⚠️</span>
-    <span id="avisoErroTexto">Mensagem de erro aqui.</span>
-  </div>
-
-  <div class="progresso">
-    <div class="barra-progresso"><div class="preenchido" id="barraPreenchido"></div></div>
-    <div class="texto" id="txtProgresso">0% preenchido</div>
-  </div>
-
-  <form id="formHeroi">
-
-    <!-- ══════ IDENTIFICAÇÃO / ESTRATIFICAÇÃO ══════ -->
-    <fieldset>
-      <legend>🪖 Identificação</legend>
-      <div class="campo">
-        <label>🪪 RG CBMERJ * <span style="font-weight:400;color:var(--cinza-suave);font-size:.78rem;">(chave de acompanhamento — somente números)</span></label>
-        <input type="text" name="rg_cbmerj" required inputmode="numeric" pattern="[0-9.\-]{3,15}" placeholder="Ex.: 28.310">
-        <p class="dica">Seu RG conecta suas respostas dos três marcos, permitindo acompanhar a sua evolução individual.</p>
-      </div>
-      <div class="campo">
-        <label>📅 Em qual marco do programa você está? *</label>
-        <div class="marco-opcoes">
-          <label><input type="radio" name="marco_programa" value="90" required>
-            <span class="dias">90</span><span class="desc">dias · 1ª avaliação</span></label>
-          <label><input type="radio" name="marco_programa" value="180">
-            <span class="dias">180</span><span class="desc">dias · avaliação intermediária</span></label>
-          <label><input type="radio" name="marco_programa" value="270">
-            <span class="dias">270</span><span class="desc">dias · conclusão do programa</span></label>
-        </div>
-      </div>
-    </fieldset>
-
-    <!-- ══════ PROMs ══════ -->
-    <fieldset>
-      <legend>❤️ PROMs — Resultados Percebidos por Você</legend>
-      <p class="bloco-titulo">Como você percebe a sua própria saúde e capacidade. Considere os últimos 30 dias, salvo indicação.</p>
-
-      <div class="campo">
-        <label>🩺 1. Em uma escala de 0 a 10, como você avalia a sua saúde geral HOJE? *</label>
-        <div class="escala" data-nome="prom_saude_geral"></div>
-        <div class="escala-legenda"><span>Pior saúde imaginável</span><span>Melhor saúde imaginável</span></div>
-      </div>
-
-      <div class="campo">
-        <label>📈 2. Comparada ao seu INGRESSO no programa, sua saúde está: *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_evolucao_percebida" value="Muito melhor" required> Muito melhor</label>
-          <label><input type="radio" name="prom_evolucao_percebida" value="Um pouco melhor"> Um pouco melhor</label>
-          <label><input type="radio" name="prom_evolucao_percebida" value="Igual"> Igual</label>
-          <label><input type="radio" name="prom_evolucao_percebida" value="Um pouco pior"> Um pouco pior</label>
-          <label><input type="radio" name="prom_evolucao_percebida" value="Muito pior"> Muito pior</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>💢 3. Com que frequência você apresentou dor ou desconforto no peito? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_dor_toracica" value="Nunca" required> Nunca</label>
-          <label><input type="radio" name="prom_dor_toracica" value="Raramente"> Raramente</label>
-          <label><input type="radio" name="prom_dor_toracica" value="Algumas vezes"> Algumas vezes</label>
-          <label><input type="radio" name="prom_dor_toracica" value="Frequentemente"> Frequentemente</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>💨 4. Com que frequência sentiu falta de ar em esforços habituais (escadas, corrida leve, deslocamento com equipamento)? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_dispneia" value="Nunca" required> Nunca</label>
-          <label><input type="radio" name="prom_dispneia" value="Raramente"> Raramente</label>
-          <label><input type="radio" name="prom_dispneia" value="Algumas vezes"> Algumas vezes</label>
-          <label><input type="radio" name="prom_dispneia" value="Frequentemente"> Frequentemente</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>💓 5. Com que frequência sentiu palpitações ou batimentos irregulares? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_palpitacoes" value="Nunca" required> Nunca</label>
-          <label><input type="radio" name="prom_palpitacoes" value="Raramente"> Raramente</label>
-          <label><input type="radio" name="prom_palpitacoes" value="Algumas vezes"> Algumas vezes</label>
-          <label><input type="radio" name="prom_palpitacoes" value="Frequentemente"> Frequentemente</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🔋 6. O quanto o cansaço/fadiga limitou suas atividades diárias ou de serviço? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_fadiga" value="Nada" required> Nada</label>
-          <label><input type="radio" name="prom_fadiga" value="Um pouco"> Um pouco</label>
-          <label><input type="radio" name="prom_fadiga" value="Moderadamente"> Moderadamente</label>
-          <label><input type="radio" name="prom_fadiga" value="Muito"> Muito</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🚒 7. Você se sente fisicamente APTO para o desempenho pleno da sua função operacional? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_aptidao_funcional" value="Totalmente apto" required> Totalmente apto</label>
-          <label><input type="radio" name="prom_aptidao_funcional" value="Apto com limitações leves"> Apto com limitações leves</label>
-          <label><input type="radio" name="prom_aptidao_funcional" value="Apto com limitações importantes"> Limitações importantes</label>
-          <label><input type="radio" name="prom_aptidao_funcional" value="Não me sinto apto"> Não me sinto apto</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>😴 8. Como está a qualidade do seu sono? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_sono" value="Boa" required> Boa</label>
-          <label><input type="radio" name="prom_sono" value="Regular"> Regular</label>
-          <label><input type="radio" name="prom_sono" value="Ruim"> Ruim</label>
-          <label><input type="radio" name="prom_sono" value="Muito ruim"> Muito ruim</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>😤 9. De 0 a 10, qual foi o seu nível de estresse no último mês? *</label>
-        <div class="escala" data-nome="prom_estresse"></div>
-        <div class="escala-legenda"><span>Tranquilo</span><span>Extremo</span></div>
-      </div>
-
-      <div class="campo">
-        <label>💊 10. Nos últimos 30 dias, com que frequência você deixou de tomar alguma medicação prescrita? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_adesao_medicacao" value="Nunca / tomo corretamente" required> Nunca esqueço</label>
-          <label><input type="radio" name="prom_adesao_medicacao" value="Raramente"> Raramente</label>
-          <label><input type="radio" name="prom_adesao_medicacao" value="Algumas vezes"> Algumas vezes</label>
-          <label><input type="radio" name="prom_adesao_medicacao" value="Frequentemente"> Frequentemente</label>
-          <label><input type="radio" name="prom_adesao_medicacao" value="Não uso medicação"> Não uso medicação</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🥗 11. Desde que entrou no programa, o quanto você conseguiu mudar seus hábitos (alimentação, exercício, tabagismo)? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prom_mudanca_habitos" value="Mudei bastante" required> Mudei bastante</label>
-          <label><input type="radio" name="prom_mudanca_habitos" value="Mudei um pouco"> Mudei um pouco</label>
-          <label><input type="radio" name="prom_mudanca_habitos" value="Tentei, mas não mantive"> Tentei, mas não mantive</label>
-          <label><input type="radio" name="prom_mudanca_habitos" value="Não mudei"> Não mudei</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>💪 12. De 0 a 10, quanto você se sente CONFIANTE para cuidar da sua saúde cardiovascular no dia a dia? *</label>
-        <div class="escala" data-nome="prom_autoeficacia"></div>
-        <div class="escala-legenda"><span>Nada confiante</span><span>Totalmente confiante</span></div>
-      </div>
-    </fieldset>
-
-    <!-- ══════ PREMs ══════ -->
-    <fieldset class="prem">
-      <legend>🤝 PREMs — Sua Experiência com o Programa</legend>
-      <p class="bloco-titulo">Como foi a sua experiência com a equipe e os processos da 1ª Policlínica – Campinho.</p>
-
-      <div class="campo">
-        <label>📆 13. Facilidade para agendar consultas e exames do programa: *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_agendamento" value="Muito fácil" required> Muito fácil</label>
-          <label><input type="radio" name="prem_agendamento" value="Fácil"> Fácil</label>
-          <label><input type="radio" name="prem_agendamento" value="Difícil"> Difícil</label>
-          <label><input type="radio" name="prem_agendamento" value="Muito difícil"> Muito difícil</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>⏱️ 14. Tempo de espera entre a chegada e o atendimento: *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_tempo_espera" value="Excelente" required> Excelente</label>
-          <label><input type="radio" name="prem_tempo_espera" value="Bom"> Bom</label>
-          <label><input type="radio" name="prem_tempo_espera" value="Regular"> Regular</label>
-          <label><input type="radio" name="prem_tempo_espera" value="Ruim"> Ruim</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>💬 15. A equipe explicou seus resultados e seu plano de cuidado de forma clara e compreensível? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_clareza_informacao" value="Sempre" required> Sempre</label>
-          <label><input type="radio" name="prem_clareza_informacao" value="Na maioria das vezes"> Na maioria das vezes</label>
-          <label><input type="radio" name="prem_clareza_informacao" value="Às vezes"> Às vezes</label>
-          <label><input type="radio" name="prem_clareza_informacao" value="Nunca"> Nunca</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🗳️ 16. Você se sentiu envolvido nas decisões sobre o seu tratamento (decisão compartilhada)? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_decisao_compartilhada" value="Sempre" required> Sempre</label>
-          <label><input type="radio" name="prem_decisao_compartilhada" value="Na maioria das vezes"> Na maioria das vezes</label>
-          <label><input type="radio" name="prem_decisao_compartilhada" value="Às vezes"> Às vezes</label>
-          <label><input type="radio" name="prem_decisao_compartilhada" value="Nunca"> Nunca</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🙏 17. Você foi tratado com respeito, atenção e acolhimento pela equipe? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_respeito" value="Sempre" required> Sempre</label>
-          <label><input type="radio" name="prem_respeito" value="Na maioria das vezes"> Na maioria das vezes</label>
-          <label><input type="radio" name="prem_respeito" value="Às vezes"> Às vezes</label>
-          <label><input type="radio" name="prem_respeito" value="Nunca"> Nunca</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🔗 18. A coordenação do seu cuidado (exames → resultados → retorno → seguimento) funcionou de forma integrada? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_coordenacao_cuidado" value="Muito bem integrada" required> Muito bem integrada</label>
-          <label><input type="radio" name="prem_coordenacao_cuidado" value="Bem integrada"> Bem integrada</label>
-          <label><input type="radio" name="prem_coordenacao_cuidado" value="Pouco integrada"> Pouco integrada</label>
-          <label><input type="radio" name="prem_coordenacao_cuidado" value="Desorganizada"> Desorganizada</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>⏳ 19. O tempo dedicado a você durante as consultas foi suficiente? *</label>
-        <div class="opcoes">
-          <label><input type="radio" name="prem_tempo_consulta" value="Sempre suficiente" required> Sempre suficiente</label>
-          <label><input type="radio" name="prem_tempo_consulta" value="Quase sempre"> Quase sempre</label>
-          <label><input type="radio" name="prem_tempo_consulta" value="Às vezes insuficiente"> Às vezes insuficiente</label>
-          <label><input type="radio" name="prem_tempo_consulta" value="Sempre insuficiente"> Sempre insuficiente</label>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>🤝 20. De 0 a 10, quanto você CONFIA na equipe do programa para cuidar da sua saúde? *</label>
-        <div class="escala" data-nome="prem_confianca_equipe"></div>
-        <div class="escala-legenda"><span>Nenhuma confiança</span><span>Confiança total</span></div>
-      </div>
-    </fieldset>
-
-    <!-- ══════ NPS ══════ -->
-    <fieldset class="nps">
-      <legend>⭐ NPS — Recomendação Final</legend>
-
-      <div class="campo">
-        <label>📣 21. De 0 a 10, o quanto você recomendaria o Programa Coração de Herói a outro bombeiro militar? *</label>
-        <div class="escala escala-nps" data-nome="nps_recomendacao"></div>
-        <div class="escala-legenda"><span>Não recomendaria</span><span>Recomendaria com certeza</span></div>
-      </div>
-
-      <div class="campo">
-        <label>👍 22. O que o programa tem de MELHOR na sua opinião?</label>
-        <textarea name="nps_ponto_forte" placeholder="Conte para nós…"></textarea>
-      </div>
-
-      <div class="campo">
-        <label>🛠️ 23. O que precisamos MELHORAR para valorizar ainda mais o seu cuidado?</label>
-        <textarea name="nps_melhoria" placeholder="Sua crítica constrói o programa…"></textarea>
-      </div>
-    </fieldset>
-
-    <button type="submit" class="btn-enviar" id="btnEnviar">❤️ Enviar Minhas Respostas</button>
-    <p class="lgpd">🔒 Dados confidenciais, protegidos pela LGPD (Lei 13.709/2018), utilizados exclusivamente para avaliação de desfechos e melhoria contínua do Programa Coração de Herói · 1ª Policlínica – Campinho / CBMERJ.</p>
-  </form>
-
-  <div class="tela-sucesso" id="telaSucesso">
-    <div class="icone">🎖️❤️</div>
-    <h2>Respostas registradas, Herói!</h2>
-    <p>Sua avaliação foi enviada com sucesso à equipe do <strong>Programa Coração de Herói</strong>.<br>Sua voz orienta o cuidado baseado em valor — obrigado por contribuir.</p>
-    <p class="lema">"Vidas alheias, riquezas salvar" — e a sua vida também.</p>
-  </div>
-
-</div>
-
-<footer>
-  <div class="linha-dourada"></div>
-  <strong>PROGRAMA CORAÇÃO DE HERÓI</strong> · Modelo VBHC · PROMs & PREMs<br>
-  1ª Policlínica – Campinho · Diretoria Geral de Saúde · CBMERJ<br>
-  Direção: Cel BM Ricardo de Souza Carvalho
-  <div class="lema">Corpo de Bombeiros Militar do Estado do Rio de Janeiro · desde 1856</div>
-</footer>
-
+<p class="bloco"><strong>Jornada de exames e equipe de navegação</strong></p>
+<div class="campo"><label>18. Como está a situação dos exames solicitados pelo programa? *</label><div class="opcoes"><label><input type="radio" name="prem_exames_status" value="Todos concluídos ou equipe informou que não eram necessários" required> Todos concluídos ou não eram necessários</label><label><input type="radio" name="prem_exames_status" value="Alguns pendentes, aguardando contato/orientação da equipe"> Alguns pendentes, aguardando a equipe</label><label><input type="radio" name="prem_exames_status" value="Tentei agendar, mas não consegui vaga, canal ou autorização"> Tentei agendar, mas não consegui</label><label><input type="radio" name="prem_exames_status" value="Exame agendado, mas serviço cancelou ou adiou"> Foi cancelado ou adiado pelo serviço</label><label><input type="radio" name="prem_exames_status" value="Tive dificuldade para comparecer ou remarcar"> Tive dificuldade para comparecer/remarcar</label><label><input type="radio" name="prem_exames_status" value="Recebi orientação, mas adiei ou não priorizei"> Recebi orientação, mas adiei</label><label><input type="radio" name="prem_exames_status" value="Não sei quais exames faltam"> Não sei quais faltam</label><label><input type="radio" name="prem_exames_status" value="Não houve solicitação ou não se aplica"> Não houve solicitação/não se aplica</label></div></div>
+<div class="campo"><label>19. Onde você está realizando ou pretende realizar os exames solicitados? *</label><div class="opcoes"><label><input type="radio" name="prem_exames_local_realizacao" value="Somente no CBMERJ" required> Somente no CBMERJ</label><label><input type="radio" name="prem_exames_local_realizacao" value="Somente fora do CBMERJ pelo SUS"> Fora do CBMERJ pelo SUS</label><label><input type="radio" name="prem_exames_local_realizacao" value="Somente fora do CBMERJ por plano ou particular"> Fora do CBMERJ por plano/particular</label><label><input type="radio" name="prem_exames_local_realizacao" value="Parte no CBMERJ e parte fora"> Parte no CBMERJ e parte fora</label><label><input type="radio" name="prem_exames_local_realizacao" value="Ainda não iniciei os exames"> Ainda não iniciei</label><label><input type="radio" name="prem_exames_local_realizacao" value="Não houve solicitação ou não se aplica"> Não houve solicitação/não se aplica</label></div></div>
+<div class="campo condicional-exames" id="blocoExamesPendentes" style="display:none"><label>20. Quais exames ainda estão pendentes? *</label><div class="opcoes"><label><input type="checkbox" name="prem_exames_pendentes" value="ECG"> ECG</label><label><input type="checkbox" name="prem_exames_pendentes" value="MAPA"> MAPA</label><label><input type="checkbox" name="prem_exames_pendentes" value="HOLTER"> HOLTER</label><label><input type="checkbox" name="prem_exames_pendentes" value="ECOTT"> ECOTT</label><label><input type="checkbox" name="prem_exames_pendentes" value="Doppler"> Doppler</label><label><input type="checkbox" name="prem_exames_pendentes" value="Ergometria"> Ergometria</label><label><input type="checkbox" name="prem_exames_pendentes" value="ECC"> ECC</label><label><input type="checkbox" name="prem_exames_pendentes" value="AngioTC"> AngioTC</label><label><input type="checkbox" name="prem_exames_pendentes" value="Cintilografia"> Cintilografia</label><label><input type="checkbox" name="prem_exames_pendentes" value="RM"> RM</label><label><input type="checkbox" name="prem_exames_pendentes" value="CAT"> CAT</label><label><input type="checkbox" name="prem_exames_pendentes" value="Exames laboratoriais"> Exames laboratoriais</label><label><input type="checkbox" name="prem_exames_pendentes" value="Não sei"> Não sei</label></div></div>
+<div class="campo condicional-exames" id="blocoMotivosExames" style="display:none"><label>21. O que contribuiu para a pendência? Selecione tudo que se aplica. *</label><div class="opcoes"><label><input type="checkbox" name="prem_exames_motivos" value="Não recebi ou não compreendi a orientação"> Não recebi/não compreendi orientação</label><label><input type="checkbox" name="prem_exames_motivos" value="Dificuldade de contato, vaga ou autorização no CBMERJ"> Dificuldade no CBMERJ</label><label><input type="checkbox" name="prem_exames_motivos" value="Dificuldade de contato, vaga ou autorização fora do CBMERJ"> Dificuldade fora do CBMERJ</label><label><input type="checkbox" name="prem_exames_motivos" value="Serviço cancelou ou adiou"> Serviço cancelou/adiou</label><label><input type="checkbox" name="prem_exames_motivos" value="Horário, transporte, escala ou comparecimento"> Horário, transporte, escala ou comparecimento</label><label><input type="checkbox" name="prem_exames_motivos" value="Adiei ou não priorizei"> Adiei/não priorizei</label><label><input type="checkbox" name="prem_exames_motivos" value="Receio ou não quis realizar"> Receio/não quis realizar</label><label><input type="checkbox" name="prem_exames_motivos" value="Equipe orientou aguardar ou não realizar"> Equipe orientou aguardar/não realizar</label><label><input type="checkbox" name="prem_exames_motivos" value="Outro"> Outro</label></div></div>
+<div class="campo condicional-exames" id="blocoContribuicaoExames" style="display:none"><label>22. Na sua percepção, a pendência se deve principalmente a: *</label><div class="opcoes"><label><input type="radio" name="prem_exames_contribuicao" value="Acesso ou organização do serviço de saúde"> Acesso/organização do serviço</label><label><input type="radio" name="prem_exames_contribuicao" value="Dificuldade pessoal do participante"> Dificuldade pessoal</label><label><input type="radio" name="prem_exames_contribuicao" value="Ambos"> Ambos</label><label><input type="radio" name="prem_exames_contribuicao" value="Não consigo avaliar"> Não consigo avaliar</label></div></div>
+<div class="campo"><label>23. Quanto tempo você esperou ou está esperando para realizar o exame? *</label><div class="opcoes"><label><input type="radio" name="prem_exames_tempo_espera" value="Até 7 dias" required> Até 7 dias</label><label><input type="radio" name="prem_exames_tempo_espera" value="8 a 30 dias"> 8 a 30 dias</label><label><input type="radio" name="prem_exames_tempo_espera" value="31 a 60 dias"> 31 a 60 dias</label><label><input type="radio" name="prem_exames_tempo_espera" value="Mais de 60 dias"> Mais de 60 dias</label><label><input type="radio" name="prem_exames_tempo_espera" value="Ainda pendente"> Ainda pendente</label><label><input type="radio" name="prem_exames_tempo_espera" value="Não sei ou não se aplica"> Não sei/não se aplica</label></div></div>
+<div class="campo"><label>24. Foi fácil agendar ou resolver uma pendência com a equipe de navegação? *</label><div class="opcoes"><label><input type="radio" name="prem_agendamento_facilidade" value="Muito fácil" required> Muito fácil</label><label><input type="radio" name="prem_agendamento_facilidade" value="Fácil"> Fácil</label><label><input type="radio" name="prem_agendamento_facilidade" value="Nem fácil nem difícil"> Nem fácil nem difícil</label><label><input type="radio" name="prem_agendamento_facilidade" value="Difícil"> Difícil</label><label><input type="radio" name="prem_agendamento_facilidade" value="Muito difícil"> Muito difícil</label><label><input type="radio" name="prem_agendamento_facilidade" value="Não tentei ou não se aplica"> Não tentei/não se aplica</label></div></div>
+<div class="campo"><label>25. Você conseguiu contato com a equipe de navegação quando precisou? *</label><div class="opcoes"><label><input type="radio" name="prem_contato_resolucao" value="Sempre" required> Sempre</label><label><input type="radio" name="prem_contato_resolucao" value="Na maioria das vezes"> Na maioria das vezes</label><label><input type="radio" name="prem_contato_resolucao" value="Às vezes"> Às vezes</label><label><input type="radio" name="prem_contato_resolucao" value="Raramente"> Raramente</label><label><input type="radio" name="prem_contato_resolucao" value="Nunca"> Nunca</label><label><input type="radio" name="prem_contato_resolucao" value="Não precisei ou não se aplica"> Não precisei/não se aplica</label></div></div>
+<div class="campo"><label>26. A equipe de navegação tratou você com respeito, atenção e acolhimento? *</label><div class="opcoes"><label><input type="radio" name="prem_navegacao_respeito" value="Sempre" required> Sempre</label><label><input type="radio" name="prem_navegacao_respeito" value="Na maioria das vezes"> Na maioria das vezes</label><label><input type="radio" name="prem_navegacao_respeito" value="Às vezes"> Às vezes</label><label><input type="radio" name="prem_navegacao_respeito" value="Raramente"> Raramente</label><label><input type="radio" name="prem_navegacao_respeito" value="Nunca"> Nunca</label><label><input type="radio" name="prem_navegacao_respeito" value="Não tive contato"> Não tive contato</label></div></div>
+<div class="campo"><label>27. De 0 a 10, quanto você confia na equipe do programa para cuidar da sua saúde? *</label><div class="escala" data-nome="prem_confianca_equipe"></div><div class="escala-legenda"><span>Nenhuma confiança</span><span>Confiança total</span></div></div>
+</fieldset>
+<fieldset><legend><span aria-hidden="true">💊 </span>Contexto da medicação</legend>
+<p class="bloco">Duas perguntas operacionais, separadas do escore PROMIS, para distinguir adesão e barreiras de acesso ou compreensão.</p>
+<div class="campo"><label>28. Nos últimos 7 dias, quantas vezes você deixou de tomar uma medicação prescrita? *</label><div class="opcoes"><label><input type="radio" name="contexto_medicacao_adesao" value="Nenhuma" required> Nenhuma</label><label><input type="radio" name="contexto_medicacao_adesao" value="1 vez"> 1 vez</label><label><input type="radio" name="contexto_medicacao_adesao" value="2 a 3 vezes"> 2 a 3 vezes</label><label><input type="radio" name="contexto_medicacao_adesao" value="4 vezes ou mais"> 4 vezes ou mais</label><label><input type="radio" name="contexto_medicacao_adesao" value="Prefiro não responder"> Prefiro não responder</label></div></div>
+<div class="campo"><label>29. Nos últimos 30 dias, qual foi a principal dificuldade para seguir o tratamento medicamentoso? *</label><div class="opcoes"><label><input type="radio" name="contexto_medicacao_dificuldade" value="Não tive dificuldade" required> Não tive dificuldade</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Esquecimento ou dificuldade com a rotina"> Esquecimento/rotina</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Efeito adverso ou receio da medicação"> Efeito adverso/receio</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Falta na farmácia ou no serviço"> Falta na farmácia/serviço</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Dificuldade para retirar ou obter"> Dificuldade para retirar/obter</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Custo da medicação"> Custo</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Não compreendi como utilizar"> Não compreendi como utilizar</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Outro"> Outro</label><label><input type="radio" name="contexto_medicacao_dificuldade" value="Prefiro não responder"> Prefiro não responder</label></div></div>
+</fieldset>
+<fieldset class="prem"><legend><span aria-hidden="true">🚭 </span>Tabagismo — abordagem e conduta</legend>
+<p class="bloco">O objetivo é identificar se houve oferta adequada de cessação e, quando houver interesse, quais barreiras dificultam o cuidado. Não é uma avaliação de culpa.</p>
+<div class="campo"><label>30. Qual é a sua situação em relação ao cigarro ou outros produtos de tabaco? *</label><div class="opcoes"><label><input type="radio" name="tabaco_status" value="Nunca fumei" required> Nunca fumei</label><label><input type="radio" name="tabaco_status" value="Ex-fumante"> Ex-fumante</label><label><input type="radio" name="tabaco_status" value="Fumante atual"> Fumante atual</label><label><input type="radio" name="tabaco_status" value="Prefiro não responder"> Prefiro não responder</label></div></div>
+<div class="campo" id="blocoTabacoTempo" style="display:none"><label>31. Há quanto tempo você deixou de fumar? *</label><div class="opcoes"><label><input type="radio" name="tabaco_tempo_cessacao" value="Menos de 1 ano"> Menos de 1 ano</label><label><input type="radio" name="tabaco_tempo_cessacao" value="Mais de 1 ano"> Mais de 1 ano</label><label><input type="radio" name="tabaco_tempo_cessacao" value="Mais de 5 anos"> Mais de 5 anos</label><label><input type="radio" name="tabaco_tempo_cessacao" value="Mais de 10 anos"> Mais de 10 anos</label><label><input type="radio" name="tabaco_tempo_cessacao" value="Mais de 20 anos"> Mais de 20 anos</label></div></div>
+<div class="campo condicional-tabaco-atual" id="blocoTabacoAbordagem" style="display:none"><label>32. Desde que entrou no programa, como você foi abordado sobre parar de fumar? *</label><div class="opcoes"><label><input type="radio" name="tabaco_abordagem" value="Não fui abordado"> Não fui abordado</label><label><input type="radio" name="tabaco_abordagem" value="Fui perguntado ou recebi orientação"> Fui perguntado/recebi orientação</label><label><input type="radio" name="tabaco_abordagem" value="Recebi orientação e oferta de tratamento"> Recebi orientação e oferta de tratamento</label><label><input type="radio" name="tabaco_abordagem" value="Fui encaminhado ou tratamento foi prescrito"> Fui encaminhado/tratamento prescrito</label><label><input type="radio" name="tabaco_abordagem" value="Não me lembro"> Não me lembro</label></div></div>
+<div class="campo condicional-tabaco-atual" id="blocoTabacoConduta" style="display:none"><label>33. Qual foi a sua conduta em relação à oferta de tratamento para cessação? *</label><div class="opcoes"><label><input type="radio" name="tabaco_conduta" value="Não houve oferta de tratamento"> Não houve oferta</label><label><input type="radio" name="tabaco_conduta" value="Não me interessei"> Não me interessei</label><label><input type="radio" name="tabaco_conduta" value="Tive interesse, mas não iniciei"> Tive interesse, mas não iniciei</label><label><input type="radio" name="tabaco_conduta" value="Iniciei e interrompi"> Iniciei e interrompi</label><label><input type="radio" name="tabaco_conduta" value="Estou em tratamento"> Estou em tratamento</label><label><input type="radio" name="tabaco_conduta" value="Não me lembro ou prefiro não responder"> Não me lembro/prefiro não responder</label></div></div>
+<div class="campo condicional-tabaco-atual" id="blocoTabacoMotivo" style="display:none"><label>34. Se você não iniciou ou não manteve o tratamento, quais motivos contribuíram? Selecione tudo que se aplica.</label><div class="opcoes"><label><input type="checkbox" name="tabaco_motivos" value="Não percebi necessidade"> Não percebi necessidade</label><label><input type="checkbox" name="tabaco_motivos" value="Não queria parar naquele momento"> Não queria parar naquele momento</label><label><input type="checkbox" name="tabaco_motivos" value="Receio de efeitos ou abstinência"> Receio de efeitos/abstinência</label><label><input type="checkbox" name="tabaco_motivos" value="Falta de tempo ou dificuldade pessoal"> Falta de tempo/dificuldade pessoal</label><label><input type="checkbox" name="tabaco_motivos" value="Dificuldade de acesso ao tratamento"> Dificuldade de acesso</label><label><input type="checkbox" name="tabaco_motivos" value="Não recebi uma oferta clara"> Não recebi oferta clara</label><label><input type="checkbox" name="tabaco_motivos" value="Outro"> Outro</label><label><input type="checkbox" name="tabaco_motivos" value="Prefiro não responder"> Prefiro não responder</label></div></div>
+</fieldset>
+<fieldset class="nps"><legend><span aria-hidden="true">⭐ </span>Recomendação final</legend><div class="campo"><label>35. De 0 a 10, o quanto você recomendaria o Programa Coração de Herói a outro bombeiro militar? *</label><div class="escala escala-nps" data-nome="nps_recomendacao"></div><div class="escala-legenda"><span>Não recomendaria</span><span>Recomendaria com certeza</span></div></div><div class="campo"><label>36. O que o programa tem de melhor?</label><textarea name="nps_ponto_forte" placeholder="Conte para nós…"></textarea></div><div class="campo"><label>37. O que precisamos melhorar?</label><textarea name="nps_melhoria" placeholder="Sua crítica constrói o programa…"></textarea></div></fieldset>
+<div class="consentimento"><input type="checkbox" id="lgpdConsentimento" name="lgpd_consentimento" value="Sim" required><label for="lgpdConsentimento">Li e autorizo o uso das minhas respostas pela equipe do Programa Coração de Herói para acompanhamento assistencial, avaliação de desfechos e melhoria contínua, conforme a LGPD.</label></div>
+<button type="submit" class="btn" id="btnEnviar"><span aria-hidden="true">❤️ </span>Enviar minhas respostas</button><p class="lgpd">Dados confidenciais, protegidos pela LGPD, utilizados para avaliação de desfechos e melhoria contínua.</p>
+</form>
+<section class="sucesso" id="telaSucesso"><h2>Respostas registradas!</h2><p id="textoSucesso">Sua resposta foi enviada. Você pode registrar outro período quando for aplicável.</p><button type="button" class="nova" id="btnNovaResposta">Registrar nova resposta</button></section>
+</main>
+<footer><strong>PROGRAMA CORAÇÃO DE HERÓI</strong> · 1ª Policlínica – Campinho · CBMERJ</footer>
 <script>
-/* ═══ CONFIGURAÇÃO: cole aqui a URL do seu Apps Script (termina em /exec) ═══ */
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2kAbIU8QMkfJ_xchfl8NAf0mWrCbMoy_ifNjwoDB4zpj2e_UsL3_k1D_eDY4vsu4j/exec';
-
-/* Escalas 0-10 geradas automaticamente */
-document.querySelectorAll('.escala').forEach(container=>{
-  const nome=container.dataset.nome;
-  for(let i=0;i<=10;i++){
-    const l=document.createElement('label');
-    l.innerHTML='<input type="radio" name="'+nome+'" value="'+i+'" '+(i===0?'required':'')+'>'+i;
-    container.appendChild(l);
-  }
-});
-
-/* Barra de progresso */
+const SCRIPT_URL='https://script.google.com/macros/s/AKfycbx2kAbIU8QMkfJ_xchfl8NAf0mWrCbMoy_ifNjwoDB4zpj2e_UsL3_k1D_eDY4vsu4j/exec';
 const form=document.getElementById('formHeroi');
-function atualizarProgresso(){
-  const grupos=new Set(), preenchidos=new Set();
-  form.querySelectorAll('[required]').forEach(el=>{
-    grupos.add(el.name);
-    if(el.type==='radio'){ if(form.querySelector('input[name="'+el.name+'"]:checked')) preenchidos.add(el.name); }
-    else if(el.value.trim()!=='') preenchidos.add(el.name);
+const DRAFT_KEY='heroi_promis_rascunho_v2';
+const CONSENT_VERSION='consentimento-v1-2026-07';
+const PROGRAM_START='2025-01-01';
+const JSONP_TIMEOUT=20000;
+const likert={
+  global01:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global02:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global03:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global04:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global05:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global06:['Completamente','Na maior parte','Moderadamente','Um pouco','De modo nenhum'],
+  global08:['Nenhum','Leve','Moderado','Grave','Muito grave'],
+  global09:['Excelente','Muito boa','Boa','Regular','Ruim'],
+  global10:['Nunca','Raramente','Às vezes','Frequentemente','Sempre']
+};
+/* ATENÇÃO: estas tabelas de conversão e a recodificação da dor também existem em dashboard.html.
+   Qualquer alteração deve ser replicada lá (fonte única futura: agregação no Apps Script). */
+const PHYSICAL_T={4:16.2,5:19.9,6:23.5,7:26.7,8:29.6,9:32.4,10:34.9,11:37.4,12:39.8,13:42.3,14:44.9,15:47.7,16:50.8,17:54.1,18:57.7,19:61.9,20:67.7};
+const MENTAL_T={4:21.2,5:25.1,6:28.4,7:31.3,8:33.8,9:36.3,10:38.8,11:41.1,12:43.5,13:45.8,14:48.3,15:50.8,16:53.3,17:56.0,18:59.0,19:62.5,20:67.6};
+function setButtonReady(){const button=document.getElementById('btnEnviar');button.disabled=false;button.innerHTML='<span aria-hidden="true">❤️ </span>Enviar minhas respostas';}
+
+function getControls(name){return Array.from(form.elements).filter(function(el){return el.name===name;});}
+function hasChecked(name){return getControls(name).some(function(el){return el.checked&&!el.disabled;});}
+function normRG(value){return String(value||'').replace(/\D/g,'');}
+function showError(message){document.getElementById('avisoErroTexto').textContent=message;document.getElementById('avisoErro').classList.add('mostrar');window.scrollTo({top:0,behavior:'smooth'});}
+function hideError(){document.getElementById('avisoErro').classList.remove('mostrar');}
+function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+
+Object.entries(likert).forEach(function(entry){
+  const item=entry[0],labels=entry[1],box=document.querySelector('[data-promis="'+item+'"]');
+  labels.forEach(function(label,index){
+    const option=document.createElement('label');
+    option.innerHTML='<input type="radio" name="promis_'+item+'" value="'+(5-index)+'" data-text="'+label+'" '+(index===0?'required':'')+'>'+label;
+    box.appendChild(option);
   });
-  const pct=grupos.size?Math.round(preenchidos.size/grupos.size*100):0;
-  document.getElementById('barraPreenchido').style.width=pct+'%';
-  document.getElementById('txtProgresso').textContent=pct+'% preenchido';
+});
+function makeScale(container){
+  for(let value=0;value<=10;value++){
+    const option=document.createElement('label');
+    option.innerHTML='<input type="radio" name="'+container.dataset.nome+'" value="'+value+'" '+(value===0?'required':'')+'>'+value;
+    container.appendChild(option);
+  }
 }
-form.addEventListener('input',atualizarProgresso);
-form.addEventListener('change',atualizarProgresso);
+document.querySelectorAll('.escala').forEach(makeScale);
 
-/* Classificação NPS automática para a planilha */
-function classificarNPS(nota){
-  if(nota>=9) return 'Promotor';
-  if(nota>=7) return 'Neutro';
-  return 'Detrator';
+function decorateChoiceGroups(){
+  form.querySelectorAll('.opcoes,.escala').forEach(function(group){
+    const question=group.previousElementSibling;
+    const text=question?question.textContent.replace(/\s*\*+\s*$/,'').trim():'';
+    group.setAttribute('role',group.classList.contains('escala')?'radiogroup':'group');
+    if(text)group.setAttribute('aria-label',text);
+  });
+}
+function syncSelectionClasses(){
+  form.querySelectorAll('input[type="radio"],input[type="checkbox"]').forEach(function(input){
+    const label=input.closest('label');
+    if(label)label.classList.toggle('sel',input.checked);
+  });
+}
+function syncChangedGroup(input){
+  if(input.type==='radio')getControls(input.name).forEach(function(control){
+    const label=control.closest('label');
+    if(label)label.classList.toggle('sel',control.checked);
+  });
+  if(input.type==='checkbox'){
+    const label=input.closest('label');
+    if(label)label.classList.toggle('sel',input.checked);
+  }
 }
 
-function mostrarErro(msg){
-  const box=document.getElementById('avisoErro');
-  document.getElementById('avisoErroTexto').textContent=msg;
-  box.classList.add('mostrar');
-  window.scrollTo({top:0,behavior:'smooth'});
+function configureDateBounds(){
+  const input=document.getElementById('dataInspecao');
+  const now=new Date();
+  const today=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  input.min=PROGRAM_START;
+  input.max=today;
 }
-function ocultarErro(){
-  document.getElementById('avisoErro').classList.remove('mostrar');
+function daysFromInspection(){
+  const raw=document.getElementById('dataInspecao').value;
+  if(!raw)return null;
+  const date=new Date(raw+'T00:00:00'),today=new Date();
+  today.setHours(0,0,0,0);
+  const days=Math.floor((today-date)/86400000);
+  return Number.isNaN(days)?null:days;
+}
+function updatePeriod(){
+  const days=daysFromInspection(),box=document.getElementById('periodoCalculado'),raw=document.getElementById('dataInspecao').value;
+  if(!raw||days===null){box.textContent='Informe a data da Inspeção de Saúde.';return false;}
+  if(raw<PROGRAM_START){box.textContent='A data deve ser igual ou posterior ao início do programa.';return false;}
+  if(days<0){box.textContent='A data não pode estar no futuro.';return false;}
+  let moment='',stratum='',markerCode='',recommended=false;
+  if(days<=7){moment='Inicial';stratum='0-7 dias';markerCode='0 dias';recommended=true;}
+  else if(days<=74){moment='Entre marcos inicial e 90 dias';stratum='8-74 dias';markerCode='8 dias';}
+  else if(days<=105){moment='90 dias';stratum='75-105 dias';markerCode='90 dias';recommended=true;}
+  else if(days<=164){moment='Entre marcos 90 e 180 dias';stratum='106-164 dias';markerCode='106 dias';}
+  else if(days<=195){moment='180 dias';stratum='165-195 dias';markerCode='180 dias';recommended=true;}
+  else if(days<=254){moment='Entre marcos 180 e 270 dias';stratum='196-254 dias';markerCode='196 dias';}
+  else if(days<=285){moment='270 dias';stratum='255-285 dias';markerCode='270 dias';recommended=true;}
+  else{moment='Após 270 dias';stratum='Mais de 285 dias';markerCode='286 dias';}
+  document.getElementById('marcoPrograma').value=markerCode;
+  document.getElementById('marcoProgramaBruto').value=moment+' | '+stratum;
+  document.getElementById('diasDesdeInspecao').value=days;
+  document.getElementById('momentoAvaliacao').value=moment;
+  document.getElementById('estratoDias').value=stratum;
+  document.getElementById('janelaAplicacao').value=recommended?'Sim':'Não';
+  box.textContent=days+' dias desde a Inspeção de Saúde · estrato: '+stratum+' · marco analítico: '+moment+(recommended?' · janela recomendada':' · fora da janela principal');
+  return true;
 }
 
+function setConditional(selector,visible,names){
+  document.querySelectorAll(selector).forEach(function(block){
+    block.style.display=visible?'block':'none';
+    block.querySelectorAll('input').forEach(function(input){input.disabled=!visible;input.required=false;});
+  });
+  if(visible)names.forEach(function(name){
+    const first=getControls(name)[0];
+    if(first){first.disabled=false;if(first.type==='radio')first.required=true;}
+  });
+}
+function updateExamBlocks(){
+  const value=form.querySelector('[name="prem_exames_status"]:checked');
+  const status=value?value.value:'';
+  const visible=Boolean(status)&&!status.startsWith('Todos')&&!status.startsWith('Não houve');
+  setConditional('.condicional-exames',visible,['prem_exames_pendentes','prem_exames_contribuicao']);
+}
+function updateTobacco(){
+  const selected=form.querySelector('[name="tabaco_status"]:checked'),status=selected?selected.value:'';
+  const exSmoker=status==='Ex-fumante',currentSmoker=status==='Fumante atual';
+  const cessation=document.getElementById('blocoTabacoTempo');
+  cessation.style.display=exSmoker?'block':'none';
+  cessation.querySelectorAll('input').forEach(function(input){input.disabled=!exSmoker;input.required=exSmoker;});
+  setConditional('.condicional-tabaco-atual',currentSmoker,['tabaco_abordagem','tabaco_conduta']);
+  const cond=form.querySelector('[name="tabaco_conduta"]:checked'),reason=currentSmoker&&cond&&['Não houve oferta de tratamento','Não me interessei','Tive interesse, mas não iniciei','Iniciei e interrompi'].includes(cond.value);
+  const motive=document.getElementById('blocoTabacoMotivo');
+  motive.style.display=reason?'block':'none';
+  motive.querySelectorAll('input').forEach(function(input){input.disabled=!reason;});
+}
 
-function jsonp(url, params){
-  return new Promise((resolve,reject)=>{
-    const callback='cb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const sep=url.includes('?')?'&':'?';
-    const query=new URLSearchParams({...params, callback}).toString();
-    const script=document.createElement('script');
-    const timer=setTimeout(()=>{ cleanup(); reject(new Error('Tempo esgotado ao consultar o Apps Script.')); },12000);
-    function cleanup(){ clearTimeout(timer); delete window[callback]; script.remove(); }
-    window[callback]=(data)=>{ cleanup(); resolve(data); };
-    script.onerror=()=>{ cleanup(); reject(new Error('Falha ao consultar o Apps Script.')); };
-    script.src=url+sep+query;
+function updateProgress(){
+  const required=Array.from(form.querySelectorAll('[required]:not(:disabled)')),groups=new Set(),done=new Set();
+  required.forEach(function(element){
+    groups.add(element.name);
+    if((element.type==='radio'||element.type==='checkbox')&&hasChecked(element.name))done.add(element.name);
+    else if(!['radio','checkbox'].includes(element.type)&&element.value.trim())done.add(element.name);
+  });
+  const percent=groups.size?Math.round(done.size/groups.size*100):0;
+  document.getElementById('barraPreenchido').style.width=percent+'%';
+  document.getElementById('txtProgresso').textContent=percent+'% preenchido';
+}
+
+function draftData(){
+  const data={};
+  new FormData(form).forEach(function(value,key){
+    if(['rg_cbmerj','rg_cbmerj_confirmacao','lgpd_consentimento'].includes(key))return;
+    if(!data[key])data[key]=[];
+    data[key].push(value);
+  });
+  return data;
+}
+function saveDraft(){
+  try{localStorage.setItem(DRAFT_KEY,JSON.stringify(draftData()));}catch(error){}
+}
+function restoreDraft(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    Object.entries(data).forEach(function(entry){
+      const name=entry[0],values=Array.isArray(entry[1])?entry[1]:[entry[1]];
+      getControls(name).forEach(function(control){
+        if(control.type==='radio'||control.type==='checkbox')control.checked=values.includes(control.value);
+        else control.value=values[0]||'';
+      });
+    });
+    document.getElementById('rascunhoAviso').style.display='block';
+  }catch(error){try{localStorage.removeItem(DRAFT_KEY);}catch(ignore){}}
+}
+function clearDraft(){try{localStorage.removeItem(DRAFT_KEY);}catch(error){}}
+
+function jsonp(url,params){
+  return new Promise(function(resolve,reject){
+    const callback='cb_'+Date.now()+'_'+Math.random().toString(16).slice(2),script=document.createElement('script');
+    const timer=setTimeout(function(){cleanup();reject(new Error('timeout'));},JSONP_TIMEOUT);
+    function cleanup(){clearTimeout(timer);delete window[callback];script.remove();}
+    window[callback]=function(data){cleanup();resolve(data);};
+    script.onerror=function(){cleanup();reject(new Error('network'));};
+    script.src=url+'?'+new URLSearchParams(Object.assign({},params,{callback:callback}));
     document.body.appendChild(script);
   });
 }
-
-/* Envio para o Google Sheets via Apps Script, com leitura da resposta
-   (necessário para detectar duplicidade de RG + marco) */
-form.addEventListener('submit', async function(e){
-  e.preventDefault();
-  ocultarErro();
-
-  if(SCRIPT_URL.indexOf('COLE_AQUI') !== -1){
-    mostrarErro('⚠️ O formulário ainda não foi configurado: cole a URL do Apps Script na constante SCRIPT_URL do código-fonte.');
-    return;
+async function checkDuplicate(rg,marco){
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const result=await jsonp(SCRIPT_URL,{action:'check',rg:rg,marco:marco});
+      return {available:true,duplicado:Boolean(result&&result.duplicado)};
+    }catch(error){if(attempt<2)await wait(1200);}
   }
+  return {available:false,duplicado:false};
+}
+async function confirmSaved(rg,marco){
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const result=await jsonp(SCRIPT_URL,{action:'check',rg:rg,marco:marco});
+      if(result&&result.duplicado)return true;
+    }catch(error){}
+    if(attempt<2)await wait(1200);
+  }
+  return false;
+}
 
-  const btn=document.getElementById('btnEnviar');
-  btn.disabled=true; btn.textContent='Enviando…';
+function painRecode(raw){
+  const value=Number(raw);
+  if(!Number.isFinite(value))return null;
+  return value===0?5:value<=3?4:value<=6?3:value<=9?2:1;
+}
+function numberValue(value){const parsed=Number(value);return Number.isFinite(parsed)?parsed:null;}
+function sumIfComplete(values){return values.every(Number.isFinite)?values.reduce(function(total,value){return total+value;},0):'';}
+function lookup(table,raw){const value=table[Math.round(raw)];return value===undefined?'':value;}
+function buildPayload(){
+  const data=new FormData(form),payload={
+    carimbo_data_hora:new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}),
+    carimbo_iso:new Date().toISOString(),
+    lgpd_versao_texto:CONSENT_VERSION
+  };
+  Array.from(new Set(Array.from(data.keys()))).forEach(function(key){payload[key]=data.getAll(key).join('; ');});
+  delete payload.rg_cbmerj_confirmacao;
+  Object.keys(likert).forEach(function(item){
+    const selected=form.querySelector('[name="promis_'+item+'"]:checked');
+    if(selected)payload['promis_'+item+'_texto']=selected.dataset.text;
+  });
+  const value=function(number){return numberValue(payload['promis_global'+String(number).padStart(2,'0')]);};
+  const pain=numberValue(payload.promis_global07),painRecoded=painRecode(pain);
+  const physicalRaw=sumIfComplete([value(3),value(6),painRecoded,value(8)]);
+  const mentalRaw=sumIfComplete([value(2),value(4),value(5),value(10)]);
+  payload.promis_global_fisica_bruto=physicalRaw;
+  payload.promis_global_mental_bruto=mentalRaw;
+  payload.promis_global07_recodificado=painRecoded===null?'':painRecoded;
+  payload.promis_global_fisica_tscore=physicalRaw===''?'':lookup(PHYSICAL_T,physicalRaw);
+  payload.promis_global_mental_tscore=mentalRaw===''?'':lookup(MENTAL_T,mentalRaw);
+  payload.promis_scoring_version='PROMIS Global Health v1.2 - tabela HealthMeasures; itens 1, 2 e 6 com redação adaptada localmente';
+  payload.promis_tscore_status='Estimado pela tabela oficial; redação adaptada requer validação metodológica';
+  payload.rg_cbmerj=normRG(payload.rg_cbmerj);
+  payload.nps_classificacao=Number(payload.nps_recomendacao)>=9?'Promotor':Number(payload.nps_recomendacao)>=7?'Neutro':'Detrator';
+  payload.versao_formulario='PROMIS-Global-PTBR-longitudinal-PREMs-essencial-DEV-2026-07-12';
+  return payload;
+}
 
-  const fd=new FormData(form);
-  const payload={ carimbo_data_hora: new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) };
-  [...new Set([...fd.keys()])].forEach(k=>{ payload[k]=fd.getAll(k).join('; '); });
+form.querySelector('[name="rg_cbmerj"]').addEventListener('blur',function(event){event.target.value=normRG(event.target.value);});
+form.querySelector('[name="rg_cbmerj_confirmacao"]').addEventListener('blur',function(event){event.target.value=normRG(event.target.value);});
+document.getElementById('dataInspecao').addEventListener('change',function(){updatePeriod();updateProgress();saveDraft();});
+form.addEventListener('change',function(event){
+  if(event.target.matches('input[type="radio"],input[type="checkbox"]'))syncChangedGroup(event.target);
+  if(event.target.name==='prem_exames_status')updateExamBlocks();
+  if(event.target.name==='tabaco_status'||event.target.name==='tabaco_conduta')updateTobacco();
+  updateProgress();
+  saveDraft();
+});
+form.addEventListener('input',function(){updateProgress();saveDraft();});
 
-  payload.nps_classificacao = classificarNPS(parseInt(payload.nps_recomendacao,10));
-  payload.marco_programa_bruto = payload.marco_programa;
-  payload.marco_programa = payload.marco_programa + ' dias';
+let invalidHandled=false;
+form.addEventListener('invalid',function(event){
+  const scale=event.target.closest('.escala');
+  if(!scale)return;
+  event.preventDefault();
+  if(invalidHandled)return;
+  invalidHandled=true;
+  setTimeout(function(){invalidHandled=false;},0);
+  showError('Responda a pergunta: '+(scale.getAttribute('aria-label')||'escala de 0 a 10')+'.');
+  scale.scrollIntoView({behavior:'smooth',block:'center'});
+  event.target.focus();
+},true);
 
+form.addEventListener('submit',async function(event){
+  event.preventDefault();
+  hideError();
+  if(!updatePeriod()){showError('Informe uma data válida da Inspeção de Saúde.');return;}
+  const rg=normRG(form.querySelector('[name="rg_cbmerj"]').value),confirmation=normRG(form.querySelector('[name="rg_cbmerj_confirmacao"]').value);
+  if(rg.length<3){showError('Informe o RG CBMERJ com pelo menos 3 números.');return;}
+  if(rg!==confirmation){showError('A confirmação do RG não coincide. Confira os dois campos.');return;}
+  const examsVisible=document.getElementById('blocoExamesPendentes').style.display!=='none';
+  if(examsVisible&&!hasChecked('prem_exames_pendentes')){showError('Selecione ao menos um exame pendente ou a opção “Não sei”.');return;}
+  if(examsVisible&&!hasChecked('prem_exames_motivos')){showError('Indique ao menos um motivo que contribuiu para a pendência (pergunta 21).');return;}
+  if(examsVisible&&!hasChecked('prem_exames_contribuicao')){showError('Indique se a pendência se relaciona principalmente ao serviço, ao participante ou a ambos.');return;}
+  if(!form.checkValidity()){form.reportValidity();return;}
+  const button=document.getElementById('btnEnviar');
+  button.disabled=true;
+  button.textContent='Enviando…';
+  const payload=buildPayload();
   try{
-    const check = await jsonp(SCRIPT_URL, {
-      action: 'check',
-      rg: payload.rg_cbmerj,
-      marco: payload.marco_programa
-    });
-
-    if(check && check.duplicado){
-      mostrarErro('🚫 Este RG já respondeu o marco de ' + payload.marco_programa + '. Cada militar responde uma única vez por marco (90, 180 ou 270 dias). Se você acredita que isso é um engano, procure a equipe da 1ª Policlínica – Campinho.');
-      btn.disabled=false; btn.textContent='❤️ Enviar Minhas Respostas';
-      return;
-    }
-
-    await fetch(SCRIPT_URL, {
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(payload)
-    });
-
+    const check=await checkDuplicate(payload.rg_cbmerj,payload.marco_programa);
+    if(!check.available)throw new Error('duplicate_check_unavailable');
+    if(check.duplicado){showError('Este RG já respondeu este período.');setButtonReady();return;}
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+    if(!await confirmSaved(payload.rg_cbmerj,payload.marco_programa))throw new Error('not_confirmed');
+    clearDraft();
+    document.getElementById('textoSucesso').textContent='Resposta registrada para o marco '+(payload.momento_avaliacao||payload.marco_programa)+'. Você pode registrar outro período quando for aplicável.';
     form.style.display='none';
-    document.querySelector('.progresso').style.display='none';
-    document.querySelector('.intro').style.display='none';
+    document.querySelectorAll('.intro,.aviso,.progresso').forEach(function(element){element.style.display='none';});
     document.getElementById('telaSucesso').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
-  }catch(err){
-    mostrarErro('⚠️ Não foi possível enviar ou validar a resposta. Verifique sua conexão, a implantação do Apps Script e tente novamente.');
-    btn.disabled=false; btn.textContent='❤️ Enviar Minhas Respostas';
+  }catch(error){
+    showError(error.message==='duplicate_check_unavailable'?'Não foi possível verificar se este marco já foi respondido. Tente novamente em alguns instantes.':'Não foi possível confirmar o registro. Verifique a conexão e tente novamente; a tela só confirma após o Apps Script localizar a resposta.');
+    setButtonReady();
   }
 });
-</script>
 
+function resetForm(){
+  clearDraft();
+  form.reset();
+  document.getElementById('rascunhoAviso').style.display='none';
+  document.getElementById('telaSucesso').style.display='none';
+  form.style.display='block';
+  document.querySelectorAll('.intro,.aviso,.progresso').forEach(function(element){element.style.display='block';});
+  setButtonReady();
+  updateExamBlocks();
+  updateTobacco();
+  updatePeriod();
+  syncSelectionClasses();
+  updateProgress();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.getElementById('btnNovaResposta').addEventListener('click',resetForm);
+configureDateBounds();
+decorateChoiceGroups();
+restoreDraft();
+updateExamBlocks();
+updateTobacco();
+updatePeriod();
+syncSelectionClasses();
+updateProgress();
+jsonp(SCRIPT_URL,{action:'ping'}).catch(function(){});
+</script>
 </body>
 </html>

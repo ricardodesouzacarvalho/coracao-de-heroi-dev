@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório v2 — Formulário ajustado + Dashboard · Coração de Herói</title>
+<style>
+:root{
+  --vinho:#761515;--escuro:#4e0b0b;--vermelho:#c41e1e;--dourado:#d4a017;
+  --fundo:#faf7f2;--texto:#343434;--muted:#6b6b6b;--azul:#1a4e8b;
+  --ok:#1a7f37;--ok-bg:#e7f4ea;--warn:#9a6700;--warn-bg:#fff8e1;
+  --erro:#b42318;--erro-bg:#fdecea;--card:#fff;--borda:#e4d9c8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+header{padding:34px 20px 30px;background:linear-gradient(135deg,var(--escuro),var(--vermelho));color:#fff;text-align:center}
+header h1{margin:0;font-size:1.5rem}
+header h1 span{color:#f3d27b}
+header p{margin:8px auto 0;max-width:780px;font-size:.92rem;opacity:.95}
+.meta{display:inline-block;margin-top:14px;padding:4px 14px;border-radius:999px;background:#f4c542;color:#4a3800;font-size:.72rem;font-weight:bold;letter-spacing:.06em;text-transform:uppercase}
+.container{max-width:920px;margin:auto;padding:28px 18px 60px}
+h2{color:var(--escuro);font-size:1.25rem;margin:38px 0 14px;padding-bottom:8px;border-bottom:3px solid var(--dourado)}
+h3{color:var(--vinho);font-size:1.02rem;margin:26px 0 8px}
+section.card{background:var(--card);border-radius:14px;box-shadow:0 4px 14px #5e0f0f14;padding:22px 24px;margin-bottom:20px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:bold;vertical-align:middle;white-space:nowrap}
+.b-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok)}
+.b-parcial{background:var(--warn-bg);color:var(--warn);border:1px solid #e0a400}
+.b-nao{background:var(--erro-bg);color:var(--erro);border:1px solid var(--erro)}
+.b-crit{background:var(--erro-bg);color:var(--erro);border:1px solid var(--erro)}
+.b-alto{background:#fdf0e3;color:#b35900;border:1px solid #d4700a}
+.b-med{background:var(--warn-bg);color:var(--warn);border:1px solid #e0a400}
+.b-baixo{background:#eef1f4;color:#4b5563;border:1px solid #c7ced6}
+.resumo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}
+.tile{background:var(--card);border-radius:12px;padding:16px;text-align:center;box-shadow:0 3px 10px #5e0f0f12;border-top:4px solid var(--dourado)}
+.tile .num{font-size:1.8rem;font-weight:800;color:var(--escuro)}
+.tile.t-ok{border-top-color:var(--ok)}.tile.t-ok .num{color:var(--ok)}
+.tile.t-crit{border-top-color:var(--erro)}.tile.t-crit .num{color:var(--erro)}
+.tile.t-alto{border-top-color:#d4700a}.tile.t-alto .num{color:#d4700a}
+.tile p{margin:4px 0 0;font-size:.78rem;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:12px 0}
+th,td{padding:9px 10px;border:1px solid var(--borda);text-align:left;vertical-align:top}
+th{background:var(--vinho);color:#fff;font-size:.78rem;letter-spacing:.03em}
+tr:nth-child(even) td{background:#fbf8f3}
+.tabela-scroll{overflow-x:auto}
+.achado{border:1px solid var(--borda);border-left:5px solid var(--muted);border-radius:10px;background:#fdfcfa;padding:14px 16px;margin-bottom:14px}
+.achado.crit{border-left-color:var(--erro);background:#fffafa}
+.achado.alto{border-left-color:#d4700a}
+.achado.med{border-left-color:#e0a400}
+.achado.baixo{border-left-color:#c7ced6}
+.achado h4{margin:0 0 6px;font-size:.95rem;color:var(--escuro)}
+.achado p{margin:6px 0;font-size:.89rem}
+.achado .rotulo{font-weight:700;color:var(--vinho)}
+ul.pontos{padding-left:0;list-style:none;margin:10px 0}
+ul.pontos li{position:relative;padding:10px 12px 10px 38px;margin-bottom:8px;background:#fdfcfa;border:1px solid var(--borda);border-radius:9px;font-size:.9rem}
+ul.pontos li::before{content:"✔";position:absolute;left:13px;top:10px;color:var(--ok);font-weight:bold}
+code{background:#f3ece0;border-radius:5px;padding:1px 6px;font-size:.84em;font-family:"SF Mono",Menlo,Consolas,monospace}
+pre{background:#211313;color:#f5eee4;border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit}
+.nota{font-size:.8rem;color:var(--muted);font-style:italic}
+.check{color:var(--ok);font-weight:700}
+footer{padding:22px;text-align:center;background:#211313;color:#fff;font-size:.78rem;border-top:3px solid var(--dourado)}
+@media(max-width:560px){header h1{font-size:1.15rem}section.card{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>RELATÓRIO v2 · <span>FORMULÁRIO AJUSTADO + DASHBOARD</span></h1>
+  <p>Reavaliação do formulário PROMIS Global Health após os ajustes e análise do dashboard vinculado — Programa Coração de Herói · CBMERJ. Ambos verificados <strong>em execução real no navegador</strong> (localhost:8011), incluindo teste de teclado, rascunho local e renderização da simulação de 149 respostas.</p>
+  <div class="meta">Análise de 12/07/2026 · nenhum arquivo analisado foi alterado</div>
+</header>
+
+<main class="container">
+
+<!-- ===== RESUMO ===== -->
+<h2>1. Resumo executivo</h2>
+<section class="card">
+<p><strong>O formulário v2 incorporou 14 das 17 recomendações do relatório anterior</strong> — incluindo todas as correções da Fase 1 e boa parte das Fases 2 e 3. As correções foram verificadas em runtime: as escalas 0–10 agora são focáveis por teclado com indicador de foco, o destaque de seleção funciona sem <code>:has()</code>, o rascunho local salva e restaura (excluindo deliberadamente os identificadores — decisão acima do que foi sugerido), a pergunta 21 é validada, o RG tem dupla digitação e os T-scores PROMIS são gravados com a tabela oficial e ressalva metodológica. A implementação está limpa e o JavaScript foi reescrito em formato legível.</p>
+<p><strong>O ponto pendente mais grave migrou de severidade: é o endpoint do Apps Script.</strong> O dashboard obtém os dados fazendo um GET público que retorna <em>a planilha inteira</em> — RGs completos e todas as respostas de saúde — para qualquer pessoa que conheça a URL. O mascaramento de identificadores acontece só na interface; os dados brutos chegam ao navegador de qualquer visitante. Enquanto isso não for tratado, o dashboard não pode ser publicado fora de ambiente restrito. Além disso, o dashboard tem dois defeitos de cálculo (indicador de janelas sempre 100% no filtro padrão e respostas sem NPS contadas como detratoras) e é, no geral, um painel bem projetado: modo demo explícito e reprodutível, escape de XSS em todo dado dinâmico, retrocompatibilidade com respostas do formulário v1 e triagem assistencial com enquadramento correto.</p>
+<div class="resumo-grid">
+  <div class="tile t-ok"><div class="num">14/17</div><p>Recomendações anteriores implementadas</p></div>
+  <div class="tile t-crit"><div class="num">1</div><p>Crítico remanescente (endpoint aberto)</p></div>
+  <div class="tile t-alto"><div class="num">2</div><p>Bugs de cálculo no dashboard</p></div>
+  <div class="tile"><div class="num">7</div><p>Achados médios/baixos novos</p></div>
+</div>
+</section>
+
+<!-- ===== FORM V2 ===== -->
+<h2>2. Formulário v2 — status das correções</h2>
+<section class="card">
+<p>Verificação item a item contra o relatório anterior. “Verificado” = comportamento confirmado ao vivo no navegador, não apenas por leitura de código.</p>
+<div class="tabela-scroll">
+<table>
+<thead><tr><th>Achado anterior</th><th>Status</th><th>Como foi resolvido</th></tr></thead>
+<tbody>
+<tr><td><strong>C1</strong> · Escalas 0–10 inacessíveis</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Inputs com técnica <em>visually-hidden</em> (clip/opacity) + <code>:focus-within</code> com contorno azul. <span class="check">Verificado:</span> radio focável, foco visível, setas funcionam.</td></tr>
+<tr><td><strong>C2</strong> · Dependência de <code>:has()</code></td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Fallback via classe <code>.sel</code> aplicada por JS em todo radio/checkbox (<code>syncChangedGroup</code>/<code>syncSelectionClasses</code>), inclusive após restaurar rascunho. <span class="check">Verificado</span> em runtime.</td></tr>
+<tr><td><strong>C3</strong> · RG em query string / endpoint <code>check</code> aberto</td><td><span class="badge b-nao">PENDENTE ✗</span></td><td>Sem mudança: o RG segue trafegando em GET via JSONP e o <code>action=check</code> segue público. Ver seção 4 — agravado pelo endpoint de leitura do dashboard.</td></tr>
+<tr><td><strong>A1</strong> · Pergunta 21 sem validação</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Validação no envio para a 21 <em>e também para a 22</em> (além do que foi pedido), com mensagens específicas; <code>checkValidity()/reportValidity()</code> como rede final.</td></tr>
+<tr><td><strong>A2</strong> · Sem persistência local</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Autosave em <code>localStorage</code> nos eventos <code>change</code> e <code>input</code>, aviso de rascunho restaurado, limpeza após envio confirmado. Decisão extra elogiável: <strong>RG, confirmação e consentimento ficam fora do rascunho</strong> — nada identificado persiste no dispositivo. <span class="check">Verificado.</span></td></tr>
+<tr><td><strong>A3</strong> · Pareamento frágil por RG digitado</td><td><span class="badge b-parcial">PARCIAL ◐</span></td><td>Dupla digitação com comparação após normalização — cobre erro de digitação. A validação contra o roster (e a devolução da data de inspeção registrada) segue como etapa de servidor.</td></tr>
+<tr><td><strong>A4</strong> · Timeout 12 s sem retry no pré-check</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Timeout 20 s; <code>checkDuplicate</code> com 3 tentativas e distinção entre “indisponível” e “duplicado”, com mensagens de erro diferentes. Só falta o ping de aquecimento no carregamento (opcional).</td></tr>
+<tr><td><strong>M1</strong> · Associação semântica pergunta↔opções</td><td><span class="badge b-parcial">PARCIAL ◐</span></td><td><code>role="radiogroup"/"group"</code> + <code>aria-label</code> gerados do enunciado; <code>role="alert"</code> no erro; <code>aria-live="polite"</code> no progresso. Emojis ainda sem <code>aria-hidden</code> (B2).</td></tr>
+<tr><td><strong>M2</strong> · Timestamp ISO</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td><code>carimbo_iso</code> gravado junto ao carimbo localizado.</td></tr>
+<tr><td><strong>M3</strong> · Trilha do consentimento</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td><code>lgpd_versao_texto</code> = <code>consentimento-v1-2026-07</code> em cada envio.</td></tr>
+<tr><td><strong>M4</strong> · T-scores PROMIS</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Tabelas físico/mental embutidas, gravação de <code>*_tscore</code> e campo <code>promis_tscore_status</code> com a ressalva da redação adaptada — exatamente o cuidado metodológico recomendado.</td></tr>
+<tr><td><strong>M6</strong> · Limites no campo de data</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td><code>min</code> = início do programa, <code>max</code> = hoje (com correção de fuso), e revalidação na mensagem do período. <span class="check">Verificado:</span> max=2026-07-12.</td></tr>
+<tr><td><strong>B1</strong> · Código monolítico</td><td><span class="badge b-parcial">PARCIAL ◐</span></td><td>JavaScript reescrito legível e organizado por função. O CSS original permanece em linha única, com um segundo bloco <code>&lt;style&gt;</code> de “patch” — funciona, mas duplica regras de seleção em dois lugares.</td></tr>
+<tr><td><strong>B3</strong> · Recap na tela de sucesso</td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>“Resposta registrada para o marco X” preenchido dinamicamente.</td></tr>
+<tr><td><strong>B4</strong> · Progresso no evento <code>input</code></td><td><span class="badge b-ok">CORRIGIDO ✓</span></td><td>Listener adicionado (também alimenta o autosave).</td></tr>
+</tbody>
+</table>
+</div>
+<h3>Observações novas do v2 (menores)</h3>
+<div class="achado baixo">
+<h4>F1 · Balão de validação nativa pode ancorar em radio invisível <span class="badge b-baixo">BAIXO</span></h4>
+<p>Se o respondente enviar sem responder uma escala 0–10, <code>reportValidity()</code> foca o radio oculto (1×1 px). O navegador rola até o local e o contorno de foco aparece no rótulo, então é utilizável — mas o balão nativo fica visualmente deslocado. Alternativa: interceptar <code>invalid</code> e usar <code>showError</code> com o número da pergunta.</p>
+</div>
+<div class="achado baixo">
+<h4>F2 · Sem ping de aquecimento do Apps Script <span class="badge b-baixo">BAIXO</span></h4>
+<p>Um <code>jsonp(SCRIPT_URL,{action:'ping'})</code> disparado no carregamento (ignorando o resultado) reduziria a chance de o cold start consumir as 3 tentativas do pré-check no momento do envio.</p>
+</div>
+</section>
+
+<!-- ===== DASHBOARD FORTES ===== -->
+<h2>3. Dashboard — pontos fortes</h2>
+<section class="card">
+<ul class="pontos">
+  <li><strong>Modo demonstração exemplar:</strong> badge visual distinto (“Demonstração · 149 respostas”), gerador com semente fixa (reprodutível entre sessões), narrativa coerente (melhora progressiva entre marcos) e fallback honesto — se a fonte real está vazia ou indisponível, o painel avisa em texto que está exibindo simulação. <span class="check">Verificado com ?demo=149.</span></li>
+  <li><strong>Escape de XSS em todo conteúdo dinâmico</strong> (<code>esc()</code> nos rótulos e células): importante porque os textos vêm da planilha, alimentada por respostas de usuários.</li>
+  <li><strong>Privacidade na interface:</strong> identificadores mascarados (•••062) na tabela de sinais, com aviso “triagem gerencial, não diagnóstica” e instrução de conferência na base restrita — enquadramento clínico correto.</li>
+  <li><strong>Retrocompatibilidade com o formulário v1:</strong> usa os T-scores gravados quando existem e recalcula escores brutos a partir dos itens quando as colunas estão ausentes — as tabelas de conversão são idênticas às do formulário (conferido valor a valor).</li>
+  <li><strong>Classificação de marcos robusta:</strong> <code>markerOf()</code> trata “Entre marcos”, “Após 270”, a flag de janela recomendada e o código numérico, na ordem correta (270 → 180 → 90), evitando falsos positivos de substring.</li>
+  <li><strong>Filtros de marco acessíveis</strong> (botões reais com <code>aria-pressed</code>) e proteção contra desmarcar todos; gráficos SVG com <code>role="img"</code> e <code>aria-label</code>.</li>
+  <li><strong>Zero dependências externas</strong> — SVG desenhado à mão, funciona offline/intranet; layout responsivo com breakpoints em 1050/820/520 px.</li>
+  <li><strong>Triagem assistencial com score composto</strong> (T&lt;40, adesão, exame pendente prolongado, barreira de acesso, cessação de tabagismo) e priorização ALTA/MODERADA — acionável para a equipe de navegação.</li>
+</ul>
+</section>
+
+<!-- ===== DASHBOARD PROBLEMAS ===== -->
+<h2>4. Dashboard — problemas e riscos</h2>
+<section class="card">
+
+<div class="achado crit">
+<h4>D1 · Endpoint GET devolve a planilha inteira a qualquer pessoa <span class="badge b-crit">CRÍTICO (LGPD)</span></h4>
+<p>O dashboard carrega os dados com <code>jsonp(SCRIPT_URL,{})</code>: o Apps Script responde com <strong>todas as linhas da planilha — RGs completos, escores de saúde física e mental, adesão, tabagismo — sem qualquer autenticação</strong>. O mascaramento (•••062) é aplicado apenas na renderização; os dados integrais estão no payload recebido por qualquer navegador que acesse a URL do script (que também está visível no fonte do formulário público). Isso supera o achado C3 anterior: além de confirmar se um RG respondeu, hoje é possível <em>baixar a base inteira</em>.</p>
+<p><span class="rotulo">Correção recomendada:</span> em ordem de robustez —</p>
+<p>1. <strong>Agregação no servidor:</strong> o Apps Script passa a responder ao dashboard apenas com os agregados (médias por marco, contagens por categoria) e uma lista de sinais já mascarada. Nenhum microdado identificado sai do servidor. É a opção compatível com manter o dashboard num link simples.<br>
+2. <strong>Ou autenticação:</strong> publicar o Web App como “somente usuários da organização” e servir o dashboard atrás do login Google, mantendo o formulário público em URL separada do endpoint de leitura.<br>
+3. Em qualquer cenário, separar as URLs: um deployment para gravação/checagem (formulário) e outro, restrito, para leitura (dashboard).</p>
+</div>
+
+<div class="achado alto">
+<h4>D2 · “Dentro das janelas principais” mostra sempre 100% no filtro padrão <span class="badge b-alto">ALTO</span></h4>
+<p>O indicador é calculado sobre as linhas <em>já filtradas</em> — e o chip “Fora dos marcos” vem desligado por padrão. Resultado: no estado inicial o painel exibe “Dentro das janelas: 100% · 0 resposta(s) fora dos marcos” mesmo quando existem respostas fora (<span class="check">verificado na demo</span>: as 4 respostas “fora dos marcos” existem, mas o indicador reporta zero). O indicador de qualidade de aplicação — justamente o que deveria vigiar a coleta — fica cego no modo padrão.</p>
+<p><span class="rotulo">Correção:</span> calcular sobre <code>DATA</code> (todas as respostas compatíveis), não sobre <code>filtered()</code>:</p>
+<pre><code>const compatible=DATA.length,
+      within=DATA.filter(r=&gt;r.marker!=='Fora dos marcos').length;</code></pre>
+</div>
+
+<div class="achado alto">
+<h4>D3 · Respostas sem NPS são contadas como detratoras <span class="badge b-alto">ALTO</span></h4>
+<p>Em <code>calcNps</code> e na distribuição, o filtro de detratores é <code>num(r.nps_recomendacao)&lt;=6</code>. Quando o campo está vazio, <code>num()</code> retorna <code>null</code> — e em JavaScript <code>null &lt;= 6</code> é <strong>verdadeiro</strong> (coerção para 0). Toda linha sem NPS (respostas parciais, linhas antigas da planilha, colunas renomeadas) entra como detratora, puxando o NPS para baixo. A demo não expõe o bug porque gera NPS para todos.</p>
+<p><span class="rotulo">Correção:</span> exigir valor válido:</p>
+<pre><code>const d=rows.filter(r=&gt;{const n=num(r.nps_recomendacao);return n!==null&&n&lt;=6;}).length;
+// e idealmente: excluir do denominador as linhas sem NPS</code></pre>
+</div>
+
+<div class="achado med">
+<h4>D4 · Denominadores dos KPIs incluem “não se aplica” <span class="badge b-med">MÉDIO</span></h4>
+<p>“Exames concluídos” divide pelos que responderam qualquer coisa — incluindo “Não houve solicitação/não se aplica” —, deflacionando o percentual; “Adesão em 7 dias” inclui “Prefiro não responder” no denominador. O radar PREM já exclui “não se aplica” (correto); os KPIs deveriam seguir o mesmo critério, com o denominador exibido no detalhe (“n=…”).</p>
+</div>
+
+<div class="achado med">
+<h4>D5 · Radar desenha dimensão sem dados como zero <span class="badge b-med">MÉDIO</span></h4>
+<p>Em <code>renderPrem</code>, valores nulos viram 0 (<code>(v||0)</code>): um marco sem nenhuma resposta válida numa dimensão aparece colapsado no centro, lendo-se como “experiência péssima” em vez de “sem dados”. Omitir o vértice ou sinalizar “N/D” na legenda.</p>
+</div>
+
+<div class="achado med">
+<h4>D6 · Análise transversal, não pareada — próximo passo do VBHC <span class="badge b-med">MÉDIO (evolução)</span></h4>
+<p>A “Evolução do PROMIS” compara médias de grupos diferentes em cada marco (transversal). Como o formulário grava RG por resposta, o dashboard poderia parear o mesmo participante entre marcos e mostrar o delta médio individual (com n de pares) — a medida que de fato demonstra valor no modelo VBHC e elimina viés de composição entre ondas. Vale exibir também o n de cada ponto da linha atual.</p>
+</div>
+
+<div class="achado med">
+<h4>D7 · Tabela de sinais corta em 15 sem avisar <span class="badge b-med">MÉDIO</span></h4>
+<p><code>renderFollowup</code> mostra os 15 primeiros por score; se houver 22 casos com sinais, 7 ficam invisíveis sem qualquer indicação. Exibir “mostrando 15 de 22” ou paginar.</p>
+</div>
+
+<div class="achado baixo">
+<h4>D8 · Sintaxe moderna pontual num código ES5 <span class="badge b-baixo">BAIXO</span></h4>
+<p>O dashboard foi escrito em estilo compatível (funções <code>function(){}</code>), mas <code>compatible()</code> usa <code>??</code> e arrow function — se um navegador antigo abrir o painel, o script inteiro falha no parse, não apenas essa função. Como o público é a equipe gestora (navegadores modernos), é baixo; ainda assim, vale uniformizar.</p>
+</div>
+
+<div class="achado baixo">
+<h4>D9 · <code>?demo=</code> só aceita exatamente “149” <span class="badge b-baixo">BAIXO</span></h4>
+<p>Qualquer outro valor (<code>?demo=1</code>) tenta a fonte real. Aceitar qualquer valor verdadeiro no parâmetro evita confusão em demonstrações.</p>
+</div>
+</section>
+
+<!-- ===== INTEGRACAO ===== -->
+<h2>5. Integração formulário ↔ dashboard</h2>
+<section class="card">
+<ul class="pontos">
+  <li><strong>Contrato de dados consistente:</strong> os campos que o dashboard consome (<code>momento_avaliacao</code>, <code>janela_aplicacao_recomendada</code>, <code>marco_programa</code>, escores brutos e T-scores, PREMs, medicação, tabagismo, NPS) são exatamente os que o formulário v2 grava.</li>
+  <li><strong>Tabelas de T-score idênticas</strong> nos dois arquivos (conferidas valor a valor) — sem risco de divergência de escore entre coleta e painel <em>hoje</em>.</li>
+  <li><strong>Retrocompatibilidade:</strong> respostas do formulário v1 (sem T-score) são convertidas pelo dashboard na leitura.</li>
+</ul>
+<div class="achado med">
+<h4>I1 · Tabelas e regras duplicadas em dois arquivos <span class="badge b-med">MÉDIO (manutenção)</span></h4>
+<p>Tabelas de T-score, recodificação da dor e classificação de marcos existem copiadas no formulário e no dashboard. Hoje estão sincronizadas; a próxima alteração em um lado pode divergir silenciosamente do outro. Se a agregação migrar para o Apps Script (correção do D1), esse passa a ser o lugar único natural dessas regras. Enquanto isso, um comentário-sentinela nos dois arquivos (“alterou aqui → altere no outro”) já reduz o risco.</p>
+</div>
+</section>
+
+<!-- ===== ROADMAP ===== -->
+<h2>6. Prioridades atualizadas</h2>
+<section class="card">
+<div class="tabela-scroll">
+<table>
+<thead><tr><th>#</th><th>Ação</th><th>Achado</th><th>Esforço</th><th>Urgência</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Fechar o endpoint de leitura</strong>: Apps Script devolve só agregados ao dashboard (ou exige login organizacional); separar deployment de escrita e leitura</td><td>D1 + C3</td><td>Médio (Apps Script)</td><td><span class="badge b-crit">Antes de qualquer publicação</span></td></tr>
+<tr><td>2</td><td>Corrigir “Dentro das janelas” (calcular sobre <code>DATA</code>)</td><td>D2</td><td>1 linha</td><td><span class="badge b-alto">Imediata</span></td></tr>
+<tr><td>3</td><td>Excluir NPS nulo dos detratores (e do denominador)</td><td>D3</td><td>2 linhas</td><td><span class="badge b-alto">Imediata</span></td></tr>
+<tr><td>4</td><td>Ajustar denominadores dos KPIs (excluir “não se aplica”) e exibir n</td><td>D4</td><td>Baixo</td><td><span class="badge b-med">Curto prazo</span></td></tr>
+<tr><td>5</td><td>Radar: tratar dimensão sem dados como N/D; tabela de sinais: “mostrando X de Y”</td><td>D5, D7</td><td>Baixo</td><td><span class="badge b-med">Curto prazo</span></td></tr>
+<tr><td>6</td><td>Evolução pareada por participante (delta individual entre marcos, com n de pares)</td><td>D6</td><td>Médio</td><td><span class="badge b-med">Próxima iteração</span></td></tr>
+<tr><td>7</td><td>Formulário: validação de RG contra roster no servidor; ping de aquecimento; <code>aria-hidden</code> nos emojis; interceptar <code>invalid</code> nas escalas</td><td>A3, F1, F2, B2</td><td>Baixo–médio</td><td><span class="badge b-baixo">Contínua</span></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- ===== CONCLUSAO ===== -->
+<h2>7. Conclusão</h2>
+<section class="card">
+<p>A iteração foi muito bem executada: o formulário v2 resolveu os bloqueios de acessibilidade e de integridade de dado apontados, com implementações verificadas em runtime e, em alguns pontos (rascunho sem identificadores, validação da pergunta 22, distinção de erros no pré-check), foi além do recomendado. O dashboard é sólido em design de informação e honestidade sobre a fonte dos dados, com dois bugs de cálculo simples de corrigir (D2, D3).</p>
+<p><strong>A única barreira real para sair do ambiente de homologação é o endpoint do Apps Script (D1/C3)</strong>: enquanto o GET público devolver microdados identificados, o dashboard só pode circular em ambiente restrito e o link do script não deve ser divulgado. Resolvido isso — de preferência movendo a agregação para o servidor, o que também elimina a duplicação de regras (I1) — o conjunto formulário + dashboard estará pronto para a operação do piloto com segurança.</p>
+</section>
+
+</main>
+<footer><strong>Relatório de análise técnica v2</strong> · Formulário PROMIS ajustado + Dashboard · Programa Coração de Herói — CBMERJ · Arquivos analisados mantidos sem alterações</footer>
+</body>
+</html>
