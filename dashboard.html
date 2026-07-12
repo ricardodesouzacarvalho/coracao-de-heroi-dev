@@ -608,11 +608,165 @@ function pairedDeltas(){
       if(Number.isFinite(base.physicalT)&&Number.isFinite(current.physicalT))dPhysical.push(current.physicalT-base.physicalT);
       if(Number.isFinite(base.mentalT)&&Number.isFinite(current.mentalT))dMental.push(current.mentalT-base.mentalT);
     });
-    return {marker:marker,phys:pairedTTest(dPhysical),ment:pairedTTest(dMental)};
+    return {marker:marker,phys:pairedStats(dPhysical),ment:pairedStats(dMental)};
   });
 }
 
-/* ---- Estatística da evolução pareada: teste t pareado (bicaudal) + d_z de Cohen ---- */
+/* ---- Estatística da evolução pareada ----
+   Fluxo adaptativo à distribuição da amostra (implementação validada contra o scipy):
+   1. Shapiro-Wilk (Royston AS R94) sobre as diferenças individuais;
+   2. p >= 0,05 → teste t pareado bicaudal + d_z de Cohen;
+      p < 0,05  → Wilcoxon de postos sinalizados (exato quando n<=25 sem empates;
+                  senão aproximação normal com correção de empates e continuidade) + r = |z|/sqrt(n);
+   3. Correção de Holm-Bonferroni sobre os p da tabela (multiplicidade). */
+function polyStat(cc,x){let r=0;for(let i=cc.length-1;i>=0;i--)r=r*x+cc[i];return r;}
+function normInv(p){
+  const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const pl=0.02425;
+  let q,r;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p<=1-pl){q=p-0.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+}
+function normCdf(z){
+  const t=1/(1+0.2316419*Math.abs(z));
+  const d=0.3989422804014327*Math.exp(-z*z/2);
+  const p=d*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  return z>0?1-p:p;
+}
+function shapiroWilk(xRaw){
+  const x=xRaw.slice().sort(function(p,q){return p-q;});
+  const n=x.length;
+  if(n<3||x[n-1]-x[0]===0)return null;
+  const n2=Math.floor(n/2);
+  const a=new Array(n2);
+  if(n===3){a[0]=Math.SQRT1_2;}
+  else{
+    const an25=n+0.25,m=new Array(n2);
+    let summ2=0;
+    for(let i=0;i<n2;i++){m[i]=normInv((i+1-0.375)/an25);summ2+=m[i]*m[i];}
+    summ2*=2;
+    const ssumm2=Math.sqrt(summ2),rsn=1/Math.sqrt(n);
+    const a1=polyStat([0,0.221157,-0.147981,-2.071190,4.434685,-2.706056],rsn)-m[0]/ssumm2;
+    let i1,fac;
+    if(n>5){
+      i1=2;
+      const a2=-m[1]/ssumm2+polyStat([0,0.042981,-0.293762,-1.752461,5.682633,-3.582633],rsn);
+      fac=Math.sqrt((summ2-2*m[0]*m[0]-2*m[1]*m[1])/(1-2*a1*a1-2*a2*a2));
+      a[1]=a2;
+    }else{
+      i1=1;
+      fac=Math.sqrt((summ2-2*m[0]*m[0])/(1-2*a1*a1));
+    }
+    a[0]=a1;
+    for(let i=i1;i<n2;i++)a[i]=-m[i]/fac;
+  }
+  let meanX=0;
+  for(let i=0;i<n;i++)meanX+=x[i];
+  meanX/=n;
+  let num=0,ss=0;
+  for(let i=0;i<n;i++){
+    let coef=0;
+    if(i<n2)coef=-a[i];else if(i>=n-n2)coef=a[n-1-i];
+    num+=coef*x[i];
+    ss+=(x[i]-meanX)*(x[i]-meanX);
+  }
+  const W=Math.min(1,num*num/ss);
+  let p;
+  if(n===3){
+    p=Math.max(0,Math.min(1,1.90985931710274*(Math.asin(Math.sqrt(W))-1.04719755119660)));
+  }else{
+    const y0=Math.log(1-W);
+    let mm,sd,y=y0;
+    if(n<=11){
+      const gamma=polyStat([-2.273,0.459],n);
+      if(y0>=gamma)return {W:W,p:1e-99};
+      y=-Math.log(gamma-y0);
+      mm=polyStat([0.544,-0.39978,0.025054,-6.714e-4],n);
+      sd=Math.exp(polyStat([1.3822,-0.77857,0.062767,-0.0020322],n));
+    }else{
+      const lx=Math.log(n);
+      mm=polyStat([-1.5861,-0.31082,-0.083751,0.0038915],lx);
+      sd=Math.exp(polyStat([-0.4803,-0.082676,0.0030302],lx));
+    }
+    p=1-normCdf((y-mm)/sd);
+  }
+  return {W:W,p:p};
+}
+function wilcoxonSignedRank(diffsRaw){
+  const d=diffsRaw.filter(function(v){return v!==0;});
+  const n=d.length;
+  if(!n)return null;
+  const abs=d.map(Math.abs);
+  const idx=abs.map(function(v,i){return i;}).sort(function(a,b){return abs[a]-abs[b];});
+  const ranks=new Array(n);
+  let hasTies=false,tieSum=0,i=0;
+  while(i<n){
+    let j=i;
+    while(j+1<n&&abs[idx[j+1]]===abs[idx[i]])j++;
+    const t=j-i+1;
+    if(t>1){hasTies=true;tieSum+=t*t*t-t;}
+    const avg=(i+j+2)/2;
+    for(let k=i;k<=j;k++)ranks[idx[k]]=avg;
+    i=j+1;
+  }
+  let Wplus=0;
+  for(let k=0;k<n;k++)if(d[k]>0)Wplus+=ranks[k];
+  const maxW=n*(n+1)/2,mu=maxW/2;
+  const sigma=Math.sqrt(n*(n+1)*(2*n+1)/24-tieSum/48);
+  let z=0;
+  if(sigma>0){
+    const dev=Wplus-mu,cc=dev>0?-0.5:dev<0?0.5:0;
+    z=(dev+cc)/sigma;
+  }
+  let p,exact=false;
+  if(!hasTies&&n<=25){
+    exact=true;
+    const counts=new Float64Array(maxW+1);
+    counts[0]=1;
+    for(let r=1;r<=n;r++)for(let w=maxW;w>=r;w--)counts[w]+=counts[w-r];
+    const lo=Math.round(Math.min(Wplus,maxW-Wplus));
+    let cum=0;
+    for(let w=0;w<=lo;w++)cum+=counts[w];
+    p=Math.min(1,2*cum/Math.pow(2,n));
+  }else{
+    p=sigma>0?2*(1-normCdf(Math.abs(z))):1;
+  }
+  return {n:n,Wplus:Wplus,z:z,p:p,r:sigma>0?Math.abs(z)/Math.sqrt(n):0,exact:exact};
+}
+function holmAdjust(ps){
+  const valid=[];
+  ps.forEach(function(p,i){if(p!==null&&p!==undefined)valid.push({p:p,i:i});});
+  valid.sort(function(a,b){return a.p-b.p;});
+  const m=valid.length,adj=ps.map(function(){return null;});
+  let running=0;
+  for(let k=0;k<m;k++){
+    running=Math.max(running,Math.min(1,(m-k)*valid[k].p));
+    adj[valid[k].i]=running;
+  }
+  return adj;
+}
+function pairedStats(diffs){
+  const n=diffs.length;
+  if(!n)return null;
+  const meanD=diffs.reduce(function(s,v){return s+v;},0)/n;
+  const base={n:n,mean:meanD,sw:null,method:null,p:null,effect:null,effectType:null,exact:false};
+  if(n<3)return base;
+  const sw=shapiroWilk(diffs);
+  base.sw=sw;
+  if(sw&&sw.p>=0.05){
+    const t=pairedTTest(diffs);
+    if(t&&t.p!==null&&t.p!==undefined){base.method='t';base.p=t.p;base.effect=t.dz;base.effectType='dz';}
+    return base;
+  }
+  const w=wilcoxonSignedRank(diffs);
+  if(w){base.method='wilcoxon';base.p=w.p;base.effect=w.r;base.effectType='r';base.exact=w.exact;}
+  return base;
+}
+
 function logGamma(x){
   const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
   let y=x,tmp=x+5.5;
@@ -658,15 +812,32 @@ function pairedTTest(diffs){
   const t=m/(sdv/Math.sqrt(n)),df=n-1;
   return {n:n,mean:m,p:ibeta(df/2,0.5,df/(df+t*t)),dz:m/sdv};
 }
-function fmtP(p){return p<0.001?'&lt;0,001':p.toFixed(3).replace('.',',');}
-function pTip(p){
-  return p<0.05
-    ?'p = '+(p<0.001?'<0,001':p.toFixed(3).replace('.',','))+' — diferença estatisticamente significativa (p < 0,05; teste t pareado, bicaudal)'
-    :'p = '+p.toFixed(3).replace('.',',')+' — diferença sem significância estatística (p ≥ 0,05; teste t pareado, bicaudal)';
+function fmtNum(v,dec){return v.toFixed(dec).replace('.',',');}
+function pText(p){return p<0.001?'<0,001':fmtNum(p,3);}
+function fmtP(p){return p<0.001?'&lt;0,001':fmtNum(p,3);}
+function methodLabel(s){
+  if(s.method==='t')return 'teste t pareado bicaudal';
+  return 'teste de Wilcoxon de postos sinalizados ('+(s.exact?'p exato':'aproximação normal com correção de empates e continuidade')+')';
 }
-function dzGrade(dz){const a=Math.abs(dz);return a<0.2?'trivial':a<0.5?'pequeno':a<0.8?'médio':'grande';}
-function dzTip(dz){
-  return 'd_z de Cohen = '+dz.toFixed(2).replace('.',',')+' — efeito '+dzGrade(dz)+' (limiares: 0,2 pequeno · 0,5 médio · 0,8 grande)';
+function pTip(s){
+  const swTxt=s.sw
+    ?'Shapiro-Wilk das diferenças: p = '+pText(s.sw.p)+(s.method==='t'?' (distribuição compatível com a normal)':' (normalidade rejeitada)')
+    :'normalidade não avaliável nesta amostra';
+  return 'p = '+pText(s.p)+' — '+methodLabel(s)+'. Escolha do teste: '+swTxt+'.';
+}
+function pAdjTip(adj,m){
+  return adj<0.05
+    ?'p ajustado (Holm-Bonferroni) = '+pText(adj)+' — permanece estatisticamente significativo após a correção para '+m+' comparações simultâneas (controle de falsos positivos por multiplicidade)'
+    :'p ajustado (Holm-Bonferroni) = '+pText(adj)+' — não significativo após a correção para '+m+' comparações simultâneas';
+}
+function effectGrade(s){
+  const a=Math.abs(s.effect);
+  if(s.effectType==='dz')return a<0.2?'trivial':a<0.5?'pequeno':a<0.8?'médio':'grande';
+  return a<0.1?'trivial':a<0.3?'pequeno':a<0.5?'médio':'grande';
+}
+function effectTip(s){
+  if(s.effectType==='dz')return 'd_z de Cohen = '+fmtNum(s.effect,2)+' — efeito '+effectGrade(s)+' (limiares: 0,2 pequeno · 0,5 médio · 0,8 grande). Medida indicada para o teste t pareado.';
+  return 'r = |z|/√n = '+fmtNum(s.effect,2)+' — efeito '+effectGrade(s)+' (limiares: 0,1 pequeno · 0,3 médio · 0,5 grande). Medida indicada para o teste de Wilcoxon.';
 }
 function renderPaired(){
   const list=pairedDeltas();
@@ -674,20 +845,28 @@ function renderPaired(){
     document.getElementById('pairedDeltas').innerHTML='<div class="empty">Ainda não há participantes com resposta no marco Inicial e em marcos seguintes.</div>';
     return;
   }
-  function deltaCell(s){return '<td>'+(s&&s.n?((s.mean>0?'+':'')+s.mean.toFixed(1).replace('.',',')):'—')+'</td>';}
+  const cells=[];
+  list.forEach(function(x){cells.push(x.phys,x.ment);});
+  const adj=holmAdjust(cells.map(function(s){return s&&s.p!==null&&s.p!==undefined?s.p:null;}));
+  const mCount=adj.filter(function(v){return v!==null;}).length;
+  function deltaCell(s){return '<td>'+(s&&s.n?((s.mean>0?'+':'')+fmtNum(s.mean,1)):'—')+'</td>';}
   function pCell(s){
     if(!s||s.p===null||s.p===undefined)return '<td>—</td>';
-    const sig=s.p<0.05;
-    return '<td><span class="stat-tip'+(sig?' sig':'')+'" data-tip="'+esc(pTip(s.p))+'">'+fmtP(s.p)+(sig?' *':'')+'</span></td>';
+    return '<td><span class="stat-tip" data-tip="'+esc(pTip(s))+'">'+fmtP(s.p)+'</span></td>';
   }
-  function dCell(s){
-    if(!s||s.dz===null||s.dz===undefined)return '<td>—</td>';
-    return '<td><span class="stat-tip" data-tip="'+esc(dzTip(s.dz))+'">'+s.dz.toFixed(2).replace('.',',')+'</span></td>';
+  function pAdjCell(a){
+    if(a===null)return '<td>—</td>';
+    const sig=a<0.05;
+    return '<td><span class="stat-tip'+(sig?' sig':'')+'" data-tip="'+esc(pAdjTip(a,mCount))+'">'+fmtP(a)+(sig?' *':'')+'</span></td>';
   }
-  document.getElementById('pairedDeltas').innerHTML='<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>Domínio</th><th>Pares</th><th>Δ T-score</th><th>Valor de p</th><th>Tamanho do efeito (d_z)</th></tr></thead><tbody>'+list.map(function(x){
-    return '<tr><td rowspan="2">Inicial → '+x.marker+'</td><td>Físico</td><td>'+(x.phys?x.phys.n:0)+'</td>'+deltaCell(x.phys)+pCell(x.phys)+dCell(x.phys)+'</tr>'
-         +'<tr><td>Mental</td><td>'+(x.ment?x.ment.n:0)+'</td>'+deltaCell(x.ment)+pCell(x.ment)+dCell(x.ment)+'</tr>';
-  }).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score no mesmo participante entre os dois momentos (elimina o viés de composição entre ondas). Valor de p: teste t pareado bicaudal sobre as diferenças individuais; tamanho do efeito: d_z de Cohen (média das diferenças ÷ desvio-padrão das diferenças). * p &lt; 0,05. Passe o cursor sobre os valores para a interpretação.</p>';
+  function eCell(s){
+    if(!s||s.effect===null||s.effect===undefined)return '<td>—</td>';
+    return '<td><span class="stat-tip" data-tip="'+esc(effectTip(s))+'">'+fmtNum(s.effect,2)+' ('+(s.effectType==='dz'?'d_z':'r')+')</span></td>';
+  }
+  document.getElementById('pairedDeltas').innerHTML='<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>Domínio</th><th>Pares</th><th>Δ T-score</th><th>Valor de p</th><th>p ajustado (Holm)</th><th>Tamanho do efeito</th></tr></thead><tbody>'+list.map(function(x,k){
+    return '<tr><td rowspan="2">Inicial → '+x.marker+'</td><td>Físico</td><td>'+(x.phys?x.phys.n:0)+'</td>'+deltaCell(x.phys)+pCell(x.phys)+pAdjCell(adj[k*2])+eCell(x.phys)+'</tr>'
+         +'<tr><td>Mental</td><td>'+(x.ment?x.ment.n:0)+'</td>'+deltaCell(x.ment)+pCell(x.ment)+pAdjCell(adj[k*2+1])+eCell(x.ment)+'</tr>';
+  }).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score no mesmo participante entre os dois momentos (elimina o viés de composição entre ondas). Fluxo estatístico adaptado à distribuição da amostra: Shapiro-Wilk sobre as diferenças individuais define o teste — compatível com a normal (p ≥ 0,05): teste t pareado bicaudal com d_z de Cohen; caso contrário: Wilcoxon de postos sinalizados (exato quando n ≤ 25 sem empates) com r = |z|/√n. Valores de p ajustados por Holm-Bonferroni para as comparações simultâneas da tabela. * p ajustado &lt; 0,05. Passe o cursor sobre os valores para a interpretação.</p>';
 }
 
 function maskedId(v){const s=String(v||'');return s.length<=3?'•••'+s:'•••'+s.slice(-3);}
