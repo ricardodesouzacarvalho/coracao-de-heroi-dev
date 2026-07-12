@@ -55,6 +55,10 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .split .bar-row{grid-template-columns:minmax(0,1.1fr) minmax(0,1.5fr) auto;gap:6px}
 .split .bar-track{min-width:36px}
 .split .bar-value{min-width:22px;padding-left:2px}
+.bar-row[data-abs]{cursor:default}
+.bar-tip{position:fixed;z-index:60;background:#25282c;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;line-height:1.35;pointer-events:none;opacity:0;transition:opacity .1s;box-shadow:0 4px 12px #0003;max-width:240px}
+.bar-tip.show{opacity:1}
+.bar-tip strong{display:block;font-weight:700;margin-bottom:1px}
 .stack{height:30px;display:flex;border-radius:5px;overflow:hidden;background:#edf0f2}
 .stack span{height:100%;min-width:0}
 .stack-labels{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:9px;color:var(--muted);font-size:.7rem}
@@ -516,20 +520,33 @@ function countCategories(rows,field,normalize){
 function renderBars(id,items,maxValue){
   const max=maxValue||Math.max.apply(null,items.map(function(i){return i.value||i.count;} ).concat([1]));
   if(!items.length){document.getElementById(id).innerHTML='<div class="empty">Sem dados no filtro atual.</div>';return;}
-  document.getElementById(id).innerHTML='<div class="bar-list">'+items.map(function(item){const value=item.value===undefined?item.count:item.value,pctValue=max?value/max*100:0;return '<div class="bar-row"><div class="bar-label">'+esc(item.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+clamp(pctValue,0,100)+'%"></div></div><div class="bar-value">'+value+(item.suffix||'')+'</div></div>';}).join('')+'</div>';
+  document.getElementById(id).innerHTML='<div class="bar-list">'+items.map(function(item){
+    const value=item.value===undefined?item.count:item.value,pctValue=max?value/max*100:0;
+    const tip=item.abs===undefined?'':' data-abs="'+esc(item.abs)+'" data-total="'+esc(item.total||'')+'" data-full="'+esc(item.label)+'"';
+    return '<div class="bar-row"'+tip+'><div class="bar-label">'+esc(item.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+clamp(pctValue,0,100)+'%"></div></div><div class="bar-value">'+value+(item.suffix||'')+'</div></div>';
+  }).join('')+'</div>';
+}
+/* Converte contagens numa lista em percentual do total da subseção,
+   guardando o valor absoluto (abs) para o tooltip de hover. */
+function percentBars(items){
+  const total=items.reduce(function(s,x){return s+(x.value===undefined?x.count:x.value);},0);
+  return items.map(function(x){
+    const abs=x.value===undefined?x.count:x.value;
+    return {label:x.label,value:total?Math.round(abs/total*100):0,suffix:'%',abs:abs,total:total};
+  });
 }
 function locationLabel(v){
   const s=String(v);if(s.includes('Somente no CBMERJ'))return 'CBMERJ';if(s.includes('SUS'))return 'Fora · SUS';if(s.includes('plano')||s.includes('particular'))return 'Fora · plano/particular';if(s.includes('Parte no CBMERJ'))return 'CBMERJ + externo';if(s.includes('Ainda não'))return 'Ainda não iniciou';return 'Não se aplica';
 }
 function renderExams(rows){
   const loc=countCategories(rows,'prem_exames_local_realizacao',locationLabel);
-  renderBars('examLocation',loc.map(function(x){return {label:x.label,value:x.count,suffix:''};}));
+  renderBars('examLocation',percentBars(loc),100);
   const pending={};
   rows.forEach(function(r){String(r.prem_exames_pendentes||'').split(';').map(function(x){return x.trim();}).filter(Boolean).forEach(function(x){pending[x]=(pending[x]||0)+1;});});
   const top=Object.keys(pending).map(function(k){return {label:k,value:pending[k]};}).sort(function(a,b){return b.value-a.value;}).slice(0,7);
-  renderBars('pendingExams',top);
+  renderBars('pendingExams',percentBars(top),100);
   const contribution=countCategories(rows,'prem_exames_contribuicao',function(v){const s=String(v);if(s.includes('serviço'))return 'Serviço de saúde';if(s.includes('pessoal'))return 'Participante';if(s==='Ambos')return 'Ambos';return 'Não consegue avaliar';});
-  renderBars('examContribution',contribution.map(function(x){return {label:x.label,value:x.count};}));
+  renderBars('examContribution',percentBars(contribution),100);
 }
 
 function adherenceLabel(v){const s=String(v);if(s==='Nenhuma')return 'Nenhuma dose omitida';if(s==='1 vez')return '1 vez';if(s.includes('2 a 3'))return '2 a 3 vezes';if(s.includes('4'))return '4 vezes ou mais';return 'Prefere não responder';}
@@ -537,13 +554,13 @@ function difficultyLabel(v){const s=String(v);if(s.includes('Não tive'))return 
 function renderMedication(rows){
   const adh=countCategories(rows,'contexto_medicacao_adesao',adherenceLabel);
   const diff=countCategories(rows,'contexto_medicacao_dificuldade',difficultyLabel);
-  renderBars('medAdherence',adh.map(function(x){return {label:x.label,value:x.count};}));
-  renderBars('medDifficulty',diff.map(function(x){return {label:x.label,value:x.count};}));
+  renderBars('medAdherence',percentBars(adh),100);
+  renderBars('medDifficulty',percentBars(diff),100);
   const tobacco=countCategories(rows,'tabaco_status');
-  renderBars('tobaccoStatus',tobacco.map(function(x){return {label:x.label,value:x.count};}));
+  renderBars('tobaccoStatus',percentBars(tobacco),100);
   const current=rows.filter(function(r){return r.tabaco_status==='Fumante atual';});
   const conduct=countCategories(current,'tabaco_conduta');
-  renderBars('tobaccoConduct',conduct.map(function(x){return {label:x.label,value:x.count};}));
+  renderBars('tobaccoConduct',percentBars(conduct),100);
 }
 
 function npsScores(rows){return rows.map(function(r){return num(r.nps_recomendacao);}).filter(function(n){return n!==null;});}
@@ -631,6 +648,38 @@ document.querySelectorAll('.chip').forEach(function(button){
     render();
   });
 });
+
+/* Tooltip de valor absoluto ao passar o cursor sobre as barras em percentual. */
+const barTip=document.createElement('div');
+barTip.className='bar-tip';
+document.body.appendChild(barTip);
+function positionTip(event){
+  const pad=14,w=barTip.offsetWidth,h=barTip.offsetHeight;
+  let x=event.clientX+pad,y=event.clientY+pad;
+  if(x+w>window.innerWidth-6)x=event.clientX-pad-w;
+  if(y+h>window.innerHeight-6)y=event.clientY-pad-h;
+  barTip.style.left=Math.max(6,x)+'px';
+  barTip.style.top=Math.max(6,y)+'px';
+}
+document.addEventListener('mouseover',function(event){
+  const row=event.target.closest?event.target.closest('.bar-row[data-abs]'):null;
+  if(!row)return;
+  const abs=row.getAttribute('data-abs'),total=row.getAttribute('data-total'),full=row.getAttribute('data-full');
+  const n=Number(abs),unidade=n===1?'resposta':'respostas';
+  barTip.innerHTML='<strong>'+esc(full)+'</strong>'+abs+' '+unidade+(total?' de '+total:'');
+  barTip.classList.add('show');
+  positionTip(event);
+});
+document.addEventListener('mousemove',function(event){
+  if(!barTip.classList.contains('show'))return;
+  if(event.target.closest&&event.target.closest('.bar-row[data-abs]'))positionTip(event);
+  else barTip.classList.remove('show');
+});
+document.addEventListener('mouseout',function(event){
+  const row=event.target.closest?event.target.closest('.bar-row[data-abs]'):null;
+  if(row&&(!event.relatedTarget||!event.relatedTarget.closest||!event.relatedTarget.closest('.bar-row[data-abs]')))barTip.classList.remove('show');
+});
+
 load();
 </script>
 </body>
