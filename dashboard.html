@@ -476,9 +476,10 @@ function renderKpis(rows){
 
 function renderPromis(){
   const selected=MARKERS.filter(function(m){return ACTIVE.has(m.key);});
-  const foraRows=markerData('Fora dos marcos');
+  const foraActive=ACTIVE.has('Fora dos marcos');
+  const foraRows=foraActive?markerData('Fora dos marcos'):[];
   const hasFora=foraRows.length>0;
-  if(!selected.length&&!hasFora){document.getElementById('promisEvolution').innerHTML='<div class="empty">Selecione ao menos um marco principal.</div>';return;}
+  if(!selected.length&&!hasFora){document.getElementById('promisEvolution').innerHTML='<div class="empty">'+(foraActive&&!selected.length?'Sem respostas para os marcos selecionados.':'Selecione ao menos um marco principal.')+'</div>';return;}
   /* Eixo x agora é temporal (dias desde a Inspeção). Os marcos oficiais ficam ancorados
      nos dias nominais 0/90/180/270 — a linha deles não muda. As respostas fora dos marcos
      são posicionadas no seu dia real, como pontos avulsos (marcadores vazados). */
