@@ -185,14 +185,14 @@ function updatePeriod(){
   if(raw<PROGRAM_START){box.textContent='A data deve ser igual ou posterior ao início do programa.';return false;}
   if(days<0){box.textContent='A data não pode estar no futuro.';return false;}
   let moment='',stratum='',markerCode='',recommended=false;
-  if(days<=7){moment='Inicial';stratum='0-7 dias';markerCode='0 dias';recommended=true;}
-  else if(days<=74){moment='Entre marcos inicial e 90 dias';stratum='8-74 dias';markerCode='8 dias';}
-  else if(days<=105){moment='90 dias';stratum='75-105 dias';markerCode='90 dias';recommended=true;}
-  else if(days<=164){moment='Entre marcos 90 e 180 dias';stratum='106-164 dias';markerCode='106 dias';}
-  else if(days<=195){moment='180 dias';stratum='165-195 dias';markerCode='180 dias';recommended=true;}
-  else if(days<=254){moment='Entre marcos 180 e 270 dias';stratum='196-254 dias';markerCode='196 dias';}
-  else if(days<=285){moment='270 dias';stratum='255-285 dias';markerCode='270 dias';recommended=true;}
-  else{moment='Após 270 dias';stratum='Mais de 285 dias';markerCode='286 dias';}
+  if(days<=15){moment='Inicial';stratum='0-15 dias';markerCode='0 dias';recommended=true;}
+  else if(days<=59){moment='Entre marcos inicial e 90 dias';stratum='16-59 dias';markerCode='16 dias';}
+  else if(days<=120){moment='90 dias';stratum='60-120 dias';markerCode='90 dias';recommended=true;}
+  else if(days<=149){moment='Entre marcos 90 e 180 dias';stratum='121-149 dias';markerCode='121 dias';}
+  else if(days<=210){moment='180 dias';stratum='150-210 dias';markerCode='180 dias';recommended=true;}
+  else if(days<=239){moment='Entre marcos 180 e 270 dias';stratum='211-239 dias';markerCode='211 dias';}
+  else if(days<=300){moment='270 dias';stratum='240-300 dias';markerCode='270 dias';recommended=true;}
+  else{moment='Após 270 dias';stratum='Mais de 300 dias';markerCode='301 dias';}
   document.getElementById('marcoPrograma').value=markerCode;
   document.getElementById('marcoProgramaBruto').value=moment+' | '+stratum;
   document.getElementById('diasDesdeInspecao').value=days;
@@ -319,7 +319,7 @@ function buildPayload(){
   /* Escores PROMIS: calculados no servidor (Code.gs). Nada é derivado aqui. */
   payload.rg_cbmerj=normRG(payload.rg_cbmerj);
   payload.nps_classificacao=Number(payload.nps_recomendacao)>=9?'Promotor':Number(payload.nps_recomendacao)>=7?'Neutro':'Detrator';
-  payload.versao_formulario='PROMIS-Global-PTBR-longitudinal-PREMs-essencial-DEV-2026-07-12.2-escore-servidor';
+  payload.versao_formulario='PROMIS-Global-PTBR-longitudinal-PREMs-essencial-DEV-2026-07-13-janelas-ampliadas';
   return payload;
 }
 
