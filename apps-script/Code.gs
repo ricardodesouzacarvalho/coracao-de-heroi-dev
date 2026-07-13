@@ -23,6 +23,51 @@
 
 var SHEET_NAME = 'Respostas';
 
+/* ---- Escore PROMIS Global Health: FONTE ÚNICA ----
+ * Tabelas oficiais HealthMeasures (v1.2) de conversão do escore bruto (4-20) em T-score.
+ * O formulário e o dashboard NÃO calculam escore: todo registro é pontuado aqui,
+ * no momento da gravação. Alterações de tabela/fórmula acontecem apenas neste arquivo. */
+var PHYSICAL_T = {4:16.2,5:19.9,6:23.5,7:26.7,8:29.6,9:32.4,10:34.9,11:37.4,12:39.8,13:42.3,14:44.9,15:47.7,16:50.8,17:54.1,18:57.7,19:61.9,20:67.7};
+var MENTAL_T   = {4:21.2,5:25.1,6:28.4,7:31.3,8:33.8,9:36.3,10:38.8,11:41.1,12:43.5,13:45.8,14:48.3,15:50.8,16:53.3,17:56.0,18:59.0,19:62.5,20:67.6};
+var SCORING_VERSION = 'PROMIS Global Health v1.2 - tabela HealthMeasures; itens 1, 2 e 6 com redação adaptada localmente (escore calculado no servidor)';
+
+function num_(v) {
+  var n = parseFloat(String(v === null || v === undefined ? '' : v).replace(',', '.'));
+  return isFinite(n) ? n : null;
+}
+
+/* Recodificação oficial do item 7 (dor 0-10): 0→5, 1-3→4, 4-6→3, 7-9→2, 10→1 */
+function painRecode_(v) {
+  var n = num_(v);
+  if (n === null) return null;
+  return n === 0 ? 5 : n <= 3 ? 4 : n <= 6 ? 3 : n <= 9 ? 2 : 1;
+}
+
+function sumComplete_(vals) {
+  var total = 0;
+  for (var i = 0; i < vals.length; i++) {
+    if (vals[i] === null || !isFinite(vals[i])) return null;
+    total += vals[i];
+  }
+  return total;
+}
+
+/* Calcula e grava no payload: dor recodificada, somas brutas (físico = itens 3+6+7r+8;
+ * mental = itens 2+4+5+10) e T-scores pela tabela oficial. Sobrescreve qualquer valor
+ * que o cliente tenha enviado nesses campos. */
+function computeScores_(payload) {
+  var pain = painRecode_(payload.promis_global07);
+  var physRaw = sumComplete_([num_(payload.promis_global03), num_(payload.promis_global06), pain, num_(payload.promis_global08)]);
+  var mentRaw = sumComplete_([num_(payload.promis_global02), num_(payload.promis_global04), num_(payload.promis_global05), num_(payload.promis_global10)]);
+  payload.promis_global07_recodificado = pain === null ? '' : pain;
+  payload.promis_global_fisica_bruto = physRaw === null ? '' : physRaw;
+  payload.promis_global_mental_bruto = mentRaw === null ? '' : mentRaw;
+  payload.promis_global_fisica_tscore = physRaw === null || PHYSICAL_T[Math.round(physRaw)] === undefined ? '' : PHYSICAL_T[Math.round(physRaw)];
+  payload.promis_global_mental_tscore = mentRaw === null || MENTAL_T[Math.round(mentRaw)] === undefined ? '' : MENTAL_T[Math.round(mentRaw)];
+  payload.promis_scoring_version = SCORING_VERSION;
+  payload.promis_tscore_status = 'Estimado pela tabela oficial; redação adaptada requer validação metodológica';
+}
+
 function sheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_NAME);
@@ -93,6 +138,7 @@ function doPost(e) {
     payload.rg_cbmerj = normRg_(payload.rg_cbmerj);
     delete payload.rg_cbmerj_confirmacao; // nunca gravar o campo de confirmação
     payload.registrado_em_servidor = new Date().toISOString(); // carimbo confiável (relógio do servidor)
+    computeScores_(payload); // fonte única do escore PROMIS (sobrescreve o que vier do cliente)
 
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);

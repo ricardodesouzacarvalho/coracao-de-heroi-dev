@@ -179,6 +179,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
         <div>
           <h3>Situação de tabagismo</h3>
           <div id="tobaccoStatus"></div>
+          <h3>Ex-fumantes — tempo de cessação</h3>
+          <div id="tobaccoCessation"></div>
           <h3>Conduta entre fumantes atuais</h3>
           <div id="tobaccoConduct"></div>
         </div>
@@ -229,18 +231,14 @@ const TOKEN_KEY='dash_promis_chave';
 let DATA=[];
 let DEMO=false;
 
-/* ATENÇÃO: estas tabelas de conversão e a recodificação da dor também existem em index.html.
-   Qualquer alteração deve ser replicada lá (fonte única futura: agregação no Apps Script). */
-const PHYSICAL_T={4:16.2,5:19.9,6:23.5,7:26.7,8:29.6,9:32.4,10:34.9,11:37.4,12:39.8,13:42.3,14:44.9,15:47.7,16:50.8,17:54.1,18:57.7,19:61.9,20:67.7};
-const MENTAL_T={4:21.2,5:25.1,6:28.4,7:31.3,8:33.8,9:36.3,10:38.8,11:41.1,12:43.5,13:45.8,14:48.3,15:50.8,16:53.3,17:56.0,18:59.0,19:62.5,20:67.6};
+/* Escores PROMIS (bruto, recodificação da dor e T-score) são calculados exclusivamente
+   no Apps Script (apps-script/Code.gs) na gravação — fonte única. Este painel apenas lê
+   os T-scores prontos da planilha. */
 
 function num(v){const n=parseFloat(String(v==null?'':v).replace(',','.'));return Number.isFinite(n)?n:null;}
 function mean(values){const valid=values.filter(function(v){return Number.isFinite(v);});return valid.length?valid.reduce(function(a,b){return a+b;},0)/valid.length:null;}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function painRecoded(v){const n=num(v);if(n===null)return null;if(n===0)return 5;if(n<=3)return 4;if(n<=6)return 3;if(n<=9)return 2;return 1;}
-function rawPhysical(r){const stored=num(r.promis_global_fisica_bruto);if(stored!==null)return stored;const vals=[num(r.promis_global03),num(r.promis_global06),num(r.promis_global08),painRecoded(r.promis_global07)];return vals.every(Number.isFinite)?vals.reduce(function(a,b){return a+b;},0):null;}
-function rawMental(r){const stored=num(r.promis_global_mental_bruto);if(stored!==null)return stored;const vals=[num(r.promis_global02),num(r.promis_global04),num(r.promis_global05),num(r.promis_global10)];return vals.every(Number.isFinite)?vals.reduce(function(a,b){return a+b;},0):null;}
 function markerOf(r){
   const windowOk=String(r.janela_aplicacao_recomendada||'').toLowerCase();
   const raw=String(r.momento_avaliacao||r.marco_programa_bruto||r.marco_programa||'').toLowerCase();
@@ -254,12 +252,12 @@ function markerOf(r){
   return 'Fora dos marcos';
 }
 function prepare(r){
-  const physicalRaw=rawPhysical(r),mentalRaw=rawMental(r);
-  const physicalStored=num(r.promis_global_fisica_tscore),mentalStored=num(r.promis_global_mental_tscore);
+  /* T-scores chegam prontos da planilha (calculados pelo Code.gs na gravação).
+     Linha sem T-score fica com null e é ignorada pelas médias e testes. */
   return Object.assign({},r,{
     marker:markerOf(r),
-    physicalT:physicalStored!==null?physicalStored:PHYSICAL_T[Math.round(physicalRaw)],
-    mentalT:mentalStored!==null?mentalStored:MENTAL_T[Math.round(mentalRaw)]
+    physicalT:num(r.promis_global_fisica_tscore),
+    mentalT:num(r.promis_global_mental_tscore)
   });
 }
 function compatible(r){
@@ -295,6 +293,9 @@ function generateDemo(){
         marco_programa:marker==='Inicial'?'0 dias':marker,
         promis_global_fisica_bruto:pRaw,
         promis_global_mental_bruto:mRaw,
+        /* Na produção o T-score vem pronto do Code.gs; a demo o aproxima linearmente do bruto. */
+        promis_global_fisica_tscore:Math.round((16.2+(pRaw-4)*(67.7-16.2)/16)*10)/10,
+        promis_global_mental_tscore:Math.round((21.2+(mRaw-4)*(67.6-21.2)/16)*10)/10,
         prem_clareza_informacao:always[favorable],
         prem_decisao_compartilhada:always[Math.min(4,favorable+(random()<.2?1:0))],
         prem_coordenacao_cuidado:coord[Math.min(4,favorable)],
@@ -560,6 +561,17 @@ function renderMedication(rows){
   renderBars('medDifficulty',percentBars(diff),100);
   const tobacco=countCategories(rows,'tabaco_status');
   renderBars('tobaccoStatus',percentBars(tobacco),100);
+  /* Ex-fumantes: tempo de cessação em ordem cronológica (não por frequência),
+     percentual sobre o total de ex-fumantes que informaram o tempo. */
+  const exSmokers=rows.filter(function(r){return r.tabaco_status==='Ex-fumante';});
+  const cessationOrder=['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 20 anos'];
+  const cessationCounts=countCategories(exSmokers,'tabaco_tempo_cessacao');
+  const cessation=cessationOrder.map(function(label){
+    const found=cessationCounts.filter(function(c){return c.label===label;})[0];
+    return found?{label:label,count:found.count}:null;
+  }).filter(Boolean);
+  cessationCounts.forEach(function(c){if(cessationOrder.indexOf(c.label)<0)cessation.push(c);});
+  renderBars('tobaccoCessation',percentBars(cessation),100);
   const current=rows.filter(function(r){return r.tabaco_status==='Fumante atual';});
   const conduct=countCategories(current,'tabaco_conduta');
   renderBars('tobaccoConduct',percentBars(conduct),100);

@@ -37,11 +37,12 @@ gerencial vinculado. Modelo VBHC · 1ª Policlínica – Campinho.
 
 ## Principais decisões técnicas
 
-- Escores PROMIS: soma bruta + T-score pela tabela oficial (HealthMeasures), com a ressalva de que os itens 1, 2 e 6 têm redação adaptada localmente pendente de validação metodológica.
+- **Escores PROMIS calculados exclusivamente no servidor** (`apps-script/Code.gs`): recodificação da dor, somas brutas e T-score pela tabela oficial (HealthMeasures) são computados na gravação, sobrescrevendo qualquer valor vindo do cliente. Formulário e dashboard não contêm tabelas de escore — fonte única, sem risco de divergência. Ressalva: os itens 1, 2 e 6 têm redação adaptada localmente pendente de validação metodológica.
+  - **Consequência operacional:** o `Code.gs` atualizado precisa estar implantado ("Nova versão" na implantação existente) ANTES de qualquer coleta; sem ele, as respostas são gravadas sem escore e o dashboard exibirá essas linhas sem T-score.
 - Envio confiável: `POST` em `no-cors` seguido de confirmação ativa (`action=check`) — a tela de sucesso só aparece após o Apps Script localizar a resposta.
 - Deduplicação dupla: pré-check no cliente + verificação sob lock no servidor.
 - Dashboard: evolução transversal por marco **e** evolução pareada por participante (delta de T-score do mesmo RG entre marcos); indicador de janelas calculado sobre toda a base, independente do filtro.
-- As tabelas de conversão T-score existem duplicadas em `index.html` e `dashboard.html` (comentário-sentinela em ambos); a fonte única futura é a agregação no Apps Script.
+- Dashboard: evolução pareada com fluxo estatístico adaptativo (Shapiro-Wilk decide entre teste t pareado e Wilcoxon; Holm-Bonferroni para multiplicidade), validado contra o scipy.
 
 ## Desenvolvimento local
 
