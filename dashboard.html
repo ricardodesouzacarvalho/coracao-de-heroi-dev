@@ -549,7 +549,7 @@ function renderPrem(rows){
     ['Cardiologista','prem_experiencia_cardiologista'],
     ['Endocrinologista','prem_experiencia_endocrinologista']
   ];
-  renderBars('professionalBars',professionals.map(function(p){const score=mean(rows.map(function(r){return scoreProfessional(r[p[1]]);}));return {label:p[0],value:score===null?0:Math.round(score),suffix:'%'};}),100);
+  renderBars('professionalBars',professionals.map(function(p){const scores=rows.map(function(r){return scoreProfessional(r[p[1]]);});const valid=scores.filter(function(v){return Number.isFinite(v);});const score=mean(scores);return {label:p[0],value:score===null?0:Math.round(score),suffix:'%',abs:valid.length,total:rows.length};}),100);
 }
 
 function countCategories(rows,field,normalize){
