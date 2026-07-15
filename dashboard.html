@@ -240,7 +240,24 @@ function num(v){const n=parseFloat(String(v==null?'':v).replace(',','.'));return
 function mean(values){const valid=values.filter(function(v){return Number.isFinite(v);});return valid.length?valid.reduce(function(a,b){return a+b;},0)/valid.length:null;}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+/* Reclassifica pelo dia real (dias_desde_inspecao) usando as janelas ampliadas atuais
+   (Inicial 0-21; 90/180/270 dias com ±40), para que respostas antigas — gravadas com a
+   regra anterior (0-15 / ±30) — sejam reavaliadas sob a regra vigente. Espelha as
+   janelas de updatePeriod() no index.html. */
+function markerFromDays(days){
+  if(!Number.isFinite(days)||days<0)return null;
+  if(days<=21)return 'Inicial';
+  if(days<=49)return 'Fora dos marcos';
+  if(days<=130)return '90 dias';
+  if(days<=139)return 'Fora dos marcos';
+  if(days<=220)return '180 dias';
+  if(days<=229)return 'Fora dos marcos';
+  if(days<=310)return '270 dias';
+  return 'Fora dos marcos';
+}
 function markerOf(r){
+  const byDays=markerFromDays(num(r.dias_desde_inspecao));
+  if(byDays)return byDays;
   const windowOk=String(r.janela_aplicacao_recomendada||'').toLowerCase();
   const raw=String(r.momento_avaliacao||r.marco_programa_bruto||r.marco_programa||'').toLowerCase();
   if(windowOk==='não'||windowOk==='nao'||raw.includes('entre marcos')||raw.includes('após')||raw.includes('apos'))return 'Fora dos marcos';
