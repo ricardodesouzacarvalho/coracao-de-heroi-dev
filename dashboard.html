@@ -145,6 +145,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <p class="score-note">T-scores estimados pela tabela de conversão do escore bruto. A redação local dos itens 1, 2 e 6 deve ser validada antes de comparações externas definitivas. O eixo horizontal representa o tempo (dias desde a Inspeção); os marcadores vazados posicionam cada resposta colhida fora das janelas no seu dia real, sem alterar a linha dos marcos oficiais (0/90/180/270). Passe o cursor sobre um marcador para ver o dia e o T-score.</p>
       <h3>Evolução pareada por participante</h3>
       <div id="pairedDeltas"></div>
+      <h3>Comparação independente entre marcos</h3>
+      <div id="independentStats"></div>
     </section>
 
     <section class="panel">
@@ -163,6 +165,9 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <div id="examLocation"></div>
       <h3>Exames pendentes mais citados</h3>
       <div id="pendingExams"></div>
+      <h3>Situação dos exames</h3>
+      <div id="examStatus"></div>
+      <p class="score-note" id="examStatusNote"></p>
       <h3>Origem percebida da pendência</h3>
       <div id="examContribution"></div>
     </section>
@@ -466,6 +471,7 @@ function render(){
   renderNps(rowsProcesso);
   renderParticipation(rows);
   renderPaired();
+  renderIndependent();
   renderFollowup(rows);
 }
 
@@ -595,6 +601,20 @@ function percentBars(items){
 function locationLabel(v){
   const s=String(v);if(s.includes('Somente no CBMERJ'))return 'CBMERJ';if(s.includes('SUS'))return 'Fora · SUS';if(s.includes('plano')||s.includes('particular'))return 'Fora · plano/particular';if(s.includes('Parte no CBMERJ'))return 'CBMERJ + externo';if(s.includes('Ainda não'))return 'Ainda não iniciou';return 'Não se aplica';
 }
+/* Rótulo curto para as 8 respostas possíveis de prem_exames_status — cobre o campo inteiro,
+   inclusive concluídos e não aplicável, para exibir a situação completa dos exames. */
+function examStatusLabel(v){
+  const s=String(v);
+  if(s.startsWith('Todos concluídos'))return 'Exames concluídos';
+  if(s.includes('aguardando contato'))return 'Aguardando a equipe';
+  if(s.includes('não consegui'))return 'Não consegui agendar';
+  if(s.includes('cancelou ou adiou'))return 'Cancelado/adiado pelo serviço';
+  if(s.includes('comparecer ou remarcar'))return 'Dificuldade para comparecer';
+  if(s.includes('adiei ou não priorizei'))return 'Adiei ou não priorizei';
+  if(s.includes('Não sei quais'))return 'Não sei quais faltam';
+  if(s.startsWith('Não houve'))return 'Não houve solicitação/não se aplica';
+  return s||'Outro';
+}
 function renderExams(rows){
   const loc=countCategories(rows,'prem_exames_local_realizacao',locationLabel);
   renderBars('examLocation',percentBars(loc),100);
@@ -602,6 +622,12 @@ function renderExams(rows){
   rows.forEach(function(r){String(r.prem_exames_pendentes||'').split(';').map(function(x){return x.trim();}).filter(Boolean).forEach(function(x){pending[x]=(pending[x]||0)+1;});});
   const top=Object.keys(pending).map(function(k){return {label:k,value:pending[k]};}).sort(function(a,b){return b.value-a.value;}).slice(0,7);
   renderBars('pendingExams',percentBars(top),100);
+  /* Situação completa: todas as respostas não vazias de prem_exames_status, inclusive
+     "Todos concluídos..." e "Não houve solicitação...". Percentuais somam 100% sobre o total. */
+  const statusRows=rows.filter(function(r){return String(r.prem_exames_status||'')!=='';});
+  const status=countCategories(statusRows,'prem_exames_status',examStatusLabel);
+  renderBars('examStatus',percentBars(status),100);
+  document.getElementById('examStatusNote').textContent='Todas as situações informadas sobre os exames (n='+statusRows.length+'); percentuais somam 100%.';
   const contribution=countCategories(rows,'prem_exames_contribuicao',function(v){const s=String(v);if(s.includes('serviço'))return 'Serviço de saúde';if(s.includes('pessoal'))return 'Participante';if(s==='Ambos')return 'Ambos';return 'Não consegue avaliar';});
   renderBars('examContribution',percentBars(contribution),100);
 }
@@ -933,6 +959,300 @@ function renderPaired(){
     return '<tr><td rowspan="2">Inicial → '+x.marker+'</td><td>Físico</td><td>'+(x.phys?x.phys.n:0)+'</td>'+deltaCell(x.phys)+pCell(x.phys)+pAdjCell(adj[k*2])+eCell(x.phys)+'</tr>'
          +'<tr><td>Mental</td><td>'+(x.ment?x.ment.n:0)+'</td>'+deltaCell(x.ment)+pCell(x.ment)+pAdjCell(adj[k*2+1])+eCell(x.ment)+'</tr>';
   }).join('')+'</tbody></table></div><p class="score-note">Variação média do T-score no mesmo participante entre os dois momentos (elimina o viés de composição entre ondas). Fluxo estatístico adaptado à distribuição da amostra: Shapiro-Wilk sobre as diferenças individuais define o teste — compatível com a normal (p ≥ 0,05): teste t pareado bicaudal com d_z de Cohen; caso contrário: Wilcoxon de postos sinalizados (exato quando n ≤ 25 sem empates) com r = |z|/√n. Valores de p ajustados por Holm-Bonferroni para as comparações simultâneas da tabela. * p ajustado &lt; 0,05. Passe o cursor sobre os valores para a interpretação.</p>';
+}
+
+/* ---- Estatística da comparação INDEPENDENTE entre marcos ----
+   Cada marco (Inicial / 90 / 180 / 270 dias) entra como uma amostra independente.
+   As respostas “Fora dos marcos” são SEMPRE excluídas deste bloco, para que nenhuma
+   observação fora da janela contamine a definição dos grupos.
+   Fluxo adaptativo:
+   1. Shapiro-Wilk em cada grupo (mesma implementação Royston AS R94 do bloco pareado);
+   2. escolha do teste pela quantidade de grupos ativos:
+      k = 2  → normalidade em ambos: teste t de Welch bicaudal (g de Hedges);
+               caso contrário: Mann-Whitney U com correção de empates (r = |z|/√N);
+      k >= 3 → normalidade em todos: ANOVA de uma via — clássica quando Levene
+               (Brown-Forsythe, centrado na mediana) não rejeita a homocedasticidade,
+               ANOVA de Welch quando rejeita (η² e ω²);
+               caso contrário: Kruskal-Wallis com correção de empates (ε²);
+   3. Post-hoc par a par com Holm-Bonferroni: t de Welch na via paramétrica,
+      teste de Dunn (postos médios do próprio Kruskal-Wallis) na via não paramétrica. */
+function avgOf(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i];return a.length?s/a.length:null;}
+function varOf(a){const n=a.length;if(n<2)return null;const m=avgOf(a);let s=0;for(let i=0;i<n;i++)s+=(a[i]-m)*(a[i]-m);return s/(n-1);}
+function quantile(sorted,q){
+  if(!sorted.length)return null;
+  const pos=(sorted.length-1)*q,lo=Math.floor(pos),hi=Math.ceil(pos);
+  return sorted[lo]+(sorted[hi]-sorted[lo])*(pos-lo);
+}
+/* Q(a,x) regularizada — cauda superior da gama; usada para o p do qui-quadrado (Kruskal-Wallis). */
+function gammaQ(a,x){
+  if(!(x>0)||!(a>0))return 1;
+  if(x<a+1){
+    let ap=a,sum=1/a,del=sum;
+    for(let n=1;n<=1000;n++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-15)break;}
+    return Math.max(0,Math.min(1,1-sum*Math.exp(-x+a*Math.log(x)-logGamma(a))));
+  }
+  const FPMIN=1e-300;
+  let b=x+1-a,c=1/FPMIN,d=1/b,h=d;
+  for(let i=1;i<=1000;i++){
+    const an=-i*(i-a);
+    b+=2;
+    d=an*d+b;if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=b+an/c;if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d;const del=d*c;h*=del;
+    if(Math.abs(del-1)<1e-15)break;
+  }
+  return Math.max(0,Math.min(1,Math.exp(-x+a*Math.log(x)-logGamma(a))*h));
+}
+function fUpper(F,df1,df2){
+  if(!(F>0)||!(df1>0)||!(df2>0))return 1;
+  return Math.max(0,Math.min(1,ibeta(df2/2,df1/2,df2/(df2+df1*F))));
+}
+function tTwoSided(t,df){
+  if(!(df>0))return null;
+  return Math.max(0,Math.min(1,ibeta(df/2,0.5,df/(df+t*t))));
+}
+function welchT(a,b){
+  const n1=a.length,n2=b.length;
+  if(n1<2||n2<2)return null;
+  const m1=avgOf(a),m2=avgOf(b),v1=varOf(a),v2=varOf(b);
+  const se=Math.sqrt(v1/n1+v2/n2);
+  if(!(se>0))return null;
+  const t=(m1-m2)/se;
+  const df=Math.pow(v1/n1+v2/n2,2)/(Math.pow(v1/n1,2)/(n1-1)+Math.pow(v2/n2,2)/(n2-1));
+  const sp=Math.sqrt(((n1-1)*v1+(n2-1)*v2)/(n1+n2-2));
+  const J=1-3/(4*(n1+n2)-9);
+  return {n1:n1,n2:n2,diff:m1-m2,t:t,df:df,p:tTwoSided(t,df),g:sp>0?(m1-m2)/sp*J:null};
+}
+function mannWhitney(a,b){
+  const n1=a.length,n2=b.length,N=n1+n2;
+  if(!n1||!n2)return null;
+  const all=a.map(function(v){return {v:v,g:0};}).concat(b.map(function(v){return {v:v,g:1};}));
+  all.sort(function(p,q){return p.v-q.v;});
+  let i=0,tieSum=0,r1=0;
+  while(i<N){
+    let j=i;
+    while(j+1<N&&all[j+1].v===all[i].v)j++;
+    const t=j-i+1,ar=(i+j+2)/2;
+    if(t>1)tieSum+=t*t*t-t;
+    for(let k=i;k<=j;k++)if(all[k].g===0)r1+=ar;
+    i=j+1;
+  }
+  const U1=r1-n1*(n1+1)/2,mu=n1*n2/2;
+  const sigma=Math.sqrt(n1*n2/12*((N+1)-tieSum/(N*(N-1))));
+  if(!(sigma>0))return null;
+  const dev=U1-mu,cc=dev>0?-0.5:dev<0?0.5:0,z=(dev+cc)/sigma;
+  return {n1:n1,n2:n2,U:U1,z:z,p:Math.min(1,2*(1-normCdf(Math.abs(z)))),r:Math.abs(z)/Math.sqrt(N),diff:avgOf(a)-avgOf(b)};
+}
+function anovaOneWay(groups){
+  const k=groups.length;
+  let N=0,grand=0;
+  groups.forEach(function(g){N+=g.length;g.forEach(function(v){grand+=v;});});
+  if(k<2||N-k<1)return null;
+  grand/=N;
+  let ssb=0,ssw=0;
+  groups.forEach(function(g){const m=avgOf(g);ssb+=g.length*(m-grand)*(m-grand);g.forEach(function(v){ssw+=(v-m)*(v-m);});});
+  if(!(ssw>0))return null;
+  const df1=k-1,df2=N-k,msw=ssw/df2,F=(ssb/df1)/msw;
+  return {N:N,k:k,F:F,df1:df1,df2:df2,p:fUpper(F,df1,df2),eta2:ssb/(ssb+ssw),omega2:(ssb-df1*msw)/(ssb+ssw+msw)};
+}
+function welchAnova(groups){
+  const k=groups.length;
+  if(k<2)return null;
+  const w=[],m=[],n=[];
+  let sw=0,swm=0,N=0;
+  for(let i=0;i<k;i++){
+    const ni=groups[i].length,vi=varOf(groups[i]);
+    if(ni<2||!(vi>0))return null;
+    n.push(ni);w.push(ni/vi);m.push(avgOf(groups[i]));N+=ni;
+  }
+  w.forEach(function(wi,i){sw+=wi;swm+=wi*m[i];});
+  const mw=swm/sw;
+  let num=0,lam=0;
+  for(let i=0;i<k;i++){num+=w[i]*(m[i]-mw)*(m[i]-mw);lam+=Math.pow(1-w[i]/sw,2)/(n[i]-1);}
+  lam=lam/(k*k-1);
+  const F=(num/(k-1))/(1+2*(k-2)*lam);
+  const df2=1/(3*lam);
+  return {N:N,k:k,F:F,df1:k-1,df2:df2,p:fUpper(F,k-1,df2)};
+}
+/* Levene na variante Brown-Forsythe: ANOVA sobre |x - mediana do grupo|. */
+function leveneTest(groups){
+  const z=groups.map(function(g){
+    const s=g.slice().sort(function(p,q){return p-q;}),med=quantile(s,0.5);
+    return g.map(function(v){return Math.abs(v-med);});
+  });
+  return anovaOneWay(z);
+}
+function kruskalWallis(groups){
+  const k=groups.length,all=[];
+  groups.forEach(function(g,gi){g.forEach(function(v){all.push({v:v,g:gi});});});
+  const N=all.length;
+  if(k<2||N<=k)return null;
+  all.sort(function(p,q){return p.v-q.v;});
+  const sumR=new Array(k).fill(0);
+  let i=0,tieSum=0;
+  while(i<N){
+    let j=i;
+    while(j+1<N&&all[j+1].v===all[i].v)j++;
+    const t=j-i+1,ar=(i+j+2)/2;
+    if(t>1)tieSum+=t*t*t-t;
+    for(let q=i;q<=j;q++)sumR[all[q].g]+=ar;
+    i=j+1;
+  }
+  let H=0;
+  groups.forEach(function(g,gi){if(g.length)H+=sumR[gi]*sumR[gi]/g.length;});
+  H=12/(N*(N+1))*H-3*(N+1);
+  const corr=1-tieSum/(N*N*N-N);
+  if(corr>0)H/=corr;
+  const df=k-1;
+  return {N:N,k:k,H:H,df:df,p:gammaQ(df/2,H/2),eps2:H/(N-1),tieSum:tieSum,corr:corr,
+    meanRanks:sumR.map(function(s,gi){return groups[gi].length?s/groups[gi].length:null;}),
+    sizes:groups.map(function(g){return g.length;})};
+}
+/* Dunn: comparação par a par sobre os postos médios do Kruskal-Wallis já calculado. */
+function dunnPair(kw,i,j){
+  const N=kw.N,ni=kw.sizes[i],nj=kw.sizes[j];
+  if(!ni||!nj)return null;
+  const sigma=Math.sqrt((N*(N+1)/12-kw.tieSum/(12*(N-1)))*(1/ni+1/nj));
+  if(!(sigma>0))return null;
+  const z=(kw.meanRanks[i]-kw.meanRanks[j])/sigma;
+  return {z:z,p:Math.min(1,2*(1-normCdf(Math.abs(z)))),r:Math.abs(z)/Math.sqrt(N),n1:ni,n2:nj};
+}
+function independentAnalysis(values){
+  /* values: array de {label, data:[números]} já sem "Fora dos marcos". */
+  const usable=values.filter(function(g){return g.data.length>=3;});
+  const k=usable.length;
+  const desc=values.map(function(g){
+    const s=g.data.slice().sort(function(p,q){return p-q;});
+    const sw=g.data.length>=3?shapiroWilk(g.data):null;
+    return {label:g.label,n:g.data.length,mean:avgOf(g.data),sd:varOf(g.data)===null?null:Math.sqrt(varOf(g.data)),
+      median:quantile(s,0.5),q1:quantile(s,0.25),q3:quantile(s,0.75),sw:sw};
+  });
+  if(k<2)return {desc:desc,k:k,global:null,posthoc:[],N:values.reduce(function(a,g){return a+g.data.length;},0)};
+  const groups=usable.map(function(g){return g.data;});
+  const labels=usable.map(function(g){return g.label;});
+  const normal=usable.every(function(g){const s=shapiroWilk(g.data);return s&&s.p>=0.05;});
+  const N=groups.reduce(function(a,g){return a+g.length;},0);
+  let global=null,posthoc=[];
+  if(k===2){
+    if(normal){
+      const t=welchT(groups[0],groups[1]);
+      if(t)global={family:'param',test:'welch-t',label:'teste t de Welch bicaudal (amostras independentes)',
+        stat:t.t,statName:'t',df1:t.df,p:t.p,effect:t.g,effectType:'g',N:N,k:k,diff:t.diff};
+    }else{
+      const u=mannWhitney(groups[0],groups[1]);
+      if(u)global={family:'rank',test:'mann-whitney',label:'teste U de Mann-Whitney (aproximação normal com correção de empates e continuidade)',
+        stat:u.U,statName:'U',p:u.p,effect:u.r,effectType:'r',N:N,k:k,diff:u.diff,z:u.z};
+    }
+    return {desc:desc,k:k,normal:normal,global:global,posthoc:[],N:N,labels:labels};
+  }
+  if(normal){
+    const lev=leveneTest(groups),homo=!lev||lev.p>=0.05;
+    const a=homo?anovaOneWay(groups):welchAnova(groups);
+    if(a)global={family:'param',test:homo?'anova':'welch-anova',
+      label:homo?'ANOVA de uma via (variâncias homogêneas)':'ANOVA de Welch (variâncias heterogêneas)',
+      stat:a.F,statName:'F',df1:a.df1,df2:a.df2,p:a.p,
+      effect:a.eta2===undefined?null:a.eta2,effectType:a.eta2===undefined?null:'eta2',omega2:a.omega2,
+      N:N,k:k,levene:lev};
+    for(let i=0;i<k;i++)for(let j=i+1;j<k;j++){
+      const t=welchT(groups[i],groups[j]);
+      if(t)posthoc.push({a:labels[i],b:labels[j],n1:t.n1,n2:t.n2,diff:t.diff,p:t.p,effect:t.g,effectType:'g',test:'t de Welch'});
+    }
+  }else{
+    const kw=kruskalWallis(groups);
+    if(kw)global={family:'rank',test:'kruskal',label:'teste de Kruskal-Wallis (correção para empates)',
+      stat:kw.H,statName:'H',df1:kw.df,p:kw.p,effect:kw.eps2,effectType:'eps2',N:N,k:k,meanRanks:kw.meanRanks};
+    if(kw)for(let i=0;i<k;i++)for(let j=i+1;j<k;j++){
+      const d=dunnPair(kw,i,j);
+      if(d)posthoc.push({a:labels[i],b:labels[j],n1:d.n1,n2:d.n2,
+        diff:avgOf(groups[i])-avgOf(groups[j]),p:d.p,effect:d.r,effectType:'r',test:'Dunn'});
+    }
+  }
+  const adj=holmAdjust(posthoc.map(function(x){return x.p;}));
+  posthoc.forEach(function(x,i){x.pAdj=adj[i];});
+  return {desc:desc,k:k,normal:normal,global:global,posthoc:posthoc,N:N,labels:labels};
+}
+function indEffectGrade(type,value){
+  const a=Math.abs(value);
+  if(type==='g')return a<0.2?'trivial':a<0.5?'pequeno':a<0.8?'médio':'grande';
+  if(type==='r')return a<0.1?'trivial':a<0.3?'pequeno':a<0.5?'médio':'grande';
+  return a<0.01?'trivial':a<0.06?'pequeno':a<0.14?'médio':'grande';
+}
+function indEffectTip(type,value){
+  if(type==='g')return 'g de Hedges = '+fmtNum(value,2)+' — efeito '+indEffectGrade(type,value)+' (limiares: 0,2 pequeno · 0,5 médio · 0,8 grande). Diferença entre médias padronizada pelo desvio combinado, com correção para amostras pequenas.';
+  if(type==='r')return 'r = |z|/√N = '+fmtNum(value,2)+' — efeito '+indEffectGrade(type,value)+' (limiares: 0,1 pequeno · 0,3 médio · 0,5 grande). Medida indicada para testes de postos.';
+  if(type==='eps2')return 'ε² = H/(N−1) = '+fmtNum(value,3)+' — efeito '+indEffectGrade(type,value)+' (limiares: 0,01 pequeno · 0,06 médio · 0,14 grande). Proporção da variabilidade dos postos explicada pelo marco.';
+  return 'η² = '+fmtNum(value,3)+' — efeito '+indEffectGrade(type,value)+' (limiares: 0,01 pequeno · 0,06 médio · 0,14 grande). Proporção da variância total explicada pelo marco.';
+}
+function indEffectShort(type){return type==='g'?'g':type==='r'?'r':type==='eps2'?'ε²':'η²';}
+function indGlobalLine(domain,res){
+  if(!res.global){
+    return '<p class="score-note"><strong>'+domain+':</strong> são necessários pelo menos dois marcos com 3 ou mais respostas para o teste global.</p>';
+  }
+  const g=res.global;
+  const swTxt=res.normal
+    ?'Shapiro-Wilk não rejeitou a normalidade em nenhum dos '+res.k+' grupos (todos com p ≥ 0,05)'
+    :'Shapiro-Wilk rejeitou a normalidade em pelo menos um grupo (p &lt; 0,05)';
+  let statTxt=g.statName+' = '+fmtNum(g.stat,g.statName==='U'?0:3);
+  if(g.statName==='F')statTxt+=' (gl '+fmtNum(g.df1,0)+'; '+fmtNum(g.df2,1)+')';
+  else if(g.statName==='t')statTxt+=' (gl = '+fmtNum(g.df1,1)+')';
+  else if(g.statName==='H')statTxt+=' (gl = '+g.df1+')';
+  const lev=g.levene?' Levene (Brown-Forsythe): p = '+fmtP(g.levene.p)+(g.levene.p>=0.05?' — variâncias homogêneas.':' — variâncias heterogêneas, adotada a correção de Welch.'):'';
+  const eff=g.effect===null||g.effect===undefined?'':' · <span class="stat-tip" data-tip="'+esc(indEffectTip(g.effectType,g.effect))+'">'+indEffectShort(g.effectType)+' = '+fmtNum(g.effect,g.effectType==='g'||g.effectType==='r'?2:3)+'</span>';
+  const sig=g.p<0.05;
+  return '<p class="score-note"><strong>'+domain+' — teste global:</strong> '+g.label+'. '
+    +statTxt+' · <span class="stat-tip'+(sig?' sig':'')+'" data-tip="'+esc('Escolha do teste: '+String(swTxt).replace('&lt;','<')+'; '+res.k+' grupo(s) independentes, N = '+g.N+'.')+'">p '+(g.p<0.001?'&lt; 0,001':'= '+fmtNum(g.p,3))+(sig?' *':'')+'</span>'+eff
+    +'. N = '+g.N+' resposta(s) em '+res.k+' marco(s). Critério: '+swTxt+'.'+lev+'</p>';
+}
+function indDescTable(res){
+  return '<div class="table-wrap"><table><thead><tr><th>Marco</th><th>n</th><th>Média (DP)</th><th>Mediana [P25–P75]</th><th>Shapiro-Wilk</th></tr></thead><tbody>'
+    +res.desc.map(function(d){
+      const swCell=d.sw
+        ?'<span class="stat-tip" data-tip="'+esc('W = '+fmtNum(d.sw.W,3)+'; p = '+pText(d.sw.p)+(d.sw.p>=0.05?' — distribuição compatível com a normal':' — normalidade rejeitada'))+'">p '+(d.sw.p<0.001?'&lt; 0,001':'= '+fmtNum(d.sw.p,3))+'</span>'
+        :'—';
+      return '<tr><td>'+esc(d.label)+'</td><td>'+d.n+'</td><td>'+(d.mean===null?'—':fmtNum(d.mean,1)+(d.sd===null?'':' ('+fmtNum(d.sd,1)+')'))+'</td><td>'+(d.median===null?'—':fmtNum(d.median,1)+' ['+fmtNum(d.q1,1)+'–'+fmtNum(d.q3,1)+']')+'</td><td>'+swCell+'</td></tr>';
+    }).join('')+'</tbody></table></div>';
+}
+function indPosthocTable(res){
+  if(!res.posthoc.length)return '';
+  const m=res.posthoc.filter(function(x){return x.pAdj!==null;}).length;
+  return '<div class="table-wrap"><table><thead><tr><th>Comparação</th><th>n₁ / n₂</th><th>Δ média</th><th>Valor de p</th><th>p ajustado (Holm)</th><th>Tamanho do efeito</th></tr></thead><tbody>'
+    +res.posthoc.map(function(x){
+      const sig=x.pAdj!==null&&x.pAdj<0.05;
+      return '<tr><td>'+esc(x.a)+' vs. '+esc(x.b)+'</td><td>'+x.n1+' / '+x.n2+'</td>'
+        +'<td>'+(x.diff>0?'+':'')+fmtNum(x.diff,1)+'</td>'
+        +'<td><span class="stat-tip" data-tip="'+esc('p = '+pText(x.p)+' — post-hoc por '+x.test+', sem correção de multiplicidade.')+'">'+fmtP(x.p)+'</span></td>'
+        +'<td>'+(x.pAdj===null?'—':'<span class="stat-tip'+(sig?' sig':'')+'" data-tip="'+esc(pAdjTip(x.pAdj,m))+'">'+fmtP(x.pAdj)+(sig?' *':'')+'</span>')+'</td>'
+        +'<td><span class="stat-tip" data-tip="'+esc(indEffectTip(x.effectType,x.effect))+'">'+fmtNum(x.effect,2)+' ('+indEffectShort(x.effectType)+')</span></td></tr>';
+    }).join('')+'</tbody></table></div>';
+}
+function renderIndependent(){
+  const target=document.getElementById('independentStats');
+  if(!target)return;
+  /* Somente marcos oficiais ativos: "Fora dos marcos" nunca entra neste bloco. */
+  const selected=MARKERS.filter(function(m){return ACTIVE.has(m.key);});
+  const collect=function(field){
+    return selected.map(function(m){
+      return {label:m.label,data:markerData(m.key).map(function(r){return r[field];}).filter(function(v){return Number.isFinite(v);})};
+    }).filter(function(g){return g.data.length>0;});
+  };
+  const phys=collect('physicalT'),ment=collect('mentalT');
+  if(phys.length<2&&ment.length<2){
+    target.innerHTML='<div class="empty">Selecione ao menos dois marcos oficiais com respostas PROMIS para a comparação independente.</div>';
+    return;
+  }
+  const resP=independentAnalysis(phys),resM=independentAnalysis(ment);
+  const total=resP.N;
+  target.innerHTML=
+     '<p class="panel-sub">Grupos independentes por marco, com as respostas “Fora dos marcos” excluídas para evitar discordância de janela. '
+    +'O teste é escolhido pela normalidade de cada grupo e pela quantidade de marcos ativos ('+resP.k+' grupo(s) no filtro atual).</p>'
+    +'<h4 style="font-size:.74rem;margin:14px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Saúde física — T-score</h4>'
+    +indDescTable(resP)+indGlobalLine('Saúde física',resP)+indPosthocTable(resP)
+    +'<h4 style="font-size:.74rem;margin:18px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Saúde mental — T-score</h4>'
+    +indDescTable(resM)+indGlobalLine('Saúde mental',resM)+indPosthocTable(resM)
+    +'<p class="score-note">Análise entre grupos independentes (cada marco é uma amostra), complementar à análise pareada abaixo: aqui todas as respostas do marco entram, inclusive as de participantes sem série completa. '
+    +'Fluxo: Shapiro-Wilk em cada grupo define a via — todos compatíveis com a normal (p ≥ 0,05): 2 grupos → teste t de Welch com g de Hedges; 3 ou mais grupos → ANOVA de uma via (de Welch quando o teste de Levene rejeita a homocedasticidade) com η²; '
+    +'algum grupo com normalidade rejeitada: 2 grupos → U de Mann-Whitney com r = |z|/√N; 3 ou mais grupos → Kruskal-Wallis com ε². '
+    +'Post-hoc par a par (t de Welch ou teste de Dunn) com p ajustado por Holm-Bonferroni. * p &lt; 0,05. Total analisado: '+total+' resposta(s) dentro dos marcos. Passe o cursor sobre os valores para a interpretação.</p>';
 }
 
 function maskedId(v){const s=String(v||'');return s.length<=3?'•••'+s:'•••'+s.slice(-3);}
