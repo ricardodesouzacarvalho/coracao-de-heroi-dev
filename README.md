@@ -40,8 +40,10 @@ gerencial vinculado. Modelo VBHC · 1ª Policlínica – Campinho.
 | 270 dias | 230–310 (±40) |
 | Fora dos marcos | vãos (22–49, 131–139, 221–229) ou após 310 dias |
 
-No gráfico de evolução do PROMIS, as respostas dos vãos são aglutinadas nos **marcos
-intermediários 45/135/225 dias** (somente no gráfico; fora das estatísticas).
+Essas são as janelas de **coleta** (gravadas pelo formulário e pelo `Code.gs`). O dashboard
+reclassifica pelo dia real com as janelas de **análise**: Inicial 0–60, 90 dias 61–130,
+180 dias 140–220 e 270 dias 230–310. A evolução pareada compara todos os pares de marcos
+(Inicial → 90, 180 e 270; 90 → 180 e 270; 180 → 270), com Holm-Bonferroni sobre a tabela.
 
 ### Data oficial da Inspeção
 
