@@ -31,12 +31,29 @@
  *    cabeçalho RG | Nome | Posto/Graduação | Telefone_WhatsApp | Link_WhatsApp | E-mail | Observação.
  *    Dados pessoais: ficam só na planilha e só saem pelo action=data, que exige o token.
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
+ * 7. E-mail semanal automático (opcional): rode uma vez instalarEnvioSemanal() pela conta que
+ *    vai enviar. Para conferir sem enviar nada, rode previaEmailsSemanais(). Na planilha do
+ *    piloto, crie a propriedade do script FORM_URL com o link do formulário do piloto.
  */
 
 var SHEET_NAME = 'Respostas';
 var INSPECOES_SHEET = 'Inspecoes';
 var CONTATOS_SHEET = 'Contatos';
 var ENVIOS_SHEET = 'Envios';
+
+/* ---- E-mail semanal ---- */
+var EMAIL_PROGRAMA = 'coracaodeheroi.1polcampinho@gmail.com';
+var NOME_REMETENTE = 'Programa Coração de Herói';
+var FORM_URL_PADRAO = 'https://ricardodesouzacarvalho.github.io/coracao-de-heroi/';
+var MAX_LEMBRETES = 2;          // além do convite, por marco
+var INTERVALO_MIN_DIAS = 6;     // sem novo contato (qualquer canal) antes disso
+/* Janelas de ANÁLISE — as mesmas do dashboard (Inicial ampliado para 0-60 dias). */
+var JANELAS_ANALISE = [
+  { marco: 'Inicial', ini: 0, fim: 60 },
+  { marco: '90 dias', ini: 61, fim: 130 },
+  { marco: '180 dias', ini: 140, fim: 220 },
+  { marco: '270 dias', ini: 230, fim: 310 }
+];
 
 /* ---- Escore PROMIS Global Health: FONTE ÚNICA ----
  * Tabelas oficiais HealthMeasures (v1.2) de conversão do escore bruto (4-20) em T-score.
@@ -450,4 +467,182 @@ function corrigirInspecoesExistentes() {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ===================== E-mail semanal automático ===================== */
+
+function janelaAnalise_(dias) {
+  for (var i = 0; i < JANELAS_ANALISE.length; i++) {
+    if (dias >= JANELAS_ANALISE[i].ini && dias <= JANELAS_ANALISE[i].fim) return JANELAS_ANALISE[i];
+  }
+  return null;
+}
+
+function objetos_(values) {
+  if (!values.length) return [];
+  var head = values[0].map(function (h) { return String(h).trim(); });
+  return values.slice(1).map(function (row) {
+    var o = {};
+    head.forEach(function (k, i) { if (k && !(k in o)) o[k] = row[i]; });
+    return o;
+  });
+}
+
+function ddmmaaaa_(ymd) {
+  var p = ymd.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+function somaDias_(ymd, n) {
+  var p = ymd.split('-');
+  var d = new Date(Date.UTC(+p[0], p[1] - 1, +p[2] + n));
+  return d.toISOString().slice(0, 10);
+}
+
+var POSTOS_ = { 'SD': 'Sd', 'CB': 'Cb', '3 SGT': '3º Sgt', '2 SGT': '2º Sgt', '1 SGT': '1º Sgt', 'SUBTEN': 'Subten',
+  '2 TEN': '2º Ten', '1 TEN': '1º Ten', 'CAP': 'Cap', 'MAJ': 'Maj', 'TEN CEL': 'Ten Cel', 'CEL': 'Cel' };
+
+function tratamento_(c) {
+  var minus = ['de', 'da', 'do', 'das', 'dos', 'e'];
+  var partes = String(c.Nome || '').toLowerCase().split(/\s+/).filter(String).map(function (w, i) {
+    return i && minus.indexOf(w) >= 0 ? w : w.charAt(0).toUpperCase() + w.slice(1);
+  });
+  var curto = partes.length > 2 ? partes[0] + ' ' + partes[partes.length - 1] : partes.join(' ');
+  var posto = POSTOS_[String(c['Posto/Graduação'] || '').trim().toUpperCase()] || '';
+  return (posto ? posto + ' ' : '') + curto;
+}
+
+/** Lista quem deve receber e-mail nesta semana (convite ou lembrete). Não envia nada. */
+function selecionarEmailsSemanais_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoje = todayYmd_();
+  var ref = inspecoesRef_();
+  var contatos = {}, porEmail = {};
+  objetos_(abaValores_(CONTATOS_SHEET)).forEach(function (c) {
+    var rg = normRg_(c.RG), em = String(c['E-mail'] || '').trim().toLowerCase();
+    if (!rg) return;
+    contatos[rg] = c;
+    if (em) porEmail[em] = (porEmail[em] || 0) + 1;
+  });
+  var respondidos = {};
+  objetos_(sheet_().getDataRange().getValues()).forEach(function (r) {
+    var d = num_(r.dias_desde_inspecao);
+    if (d === null || String(r.rg_no_programa || '') === 'Não') return;
+    var j = janelaAnalise_(d);
+    if (j) respondidos[normRg_(r.rg_cbmerj) + '|' + j.marco] = true;
+  });
+  var envios = objetos_(abaValores_(ENVIOS_SHEET));
+  var lista = [], ignorados = { semEmail: 0, emailRepetido: 0, contatoRecente: 0, limite: 0 };
+  Object.keys(ref).forEach(function (rg) {
+    var dias = daysBetween_(ref[rg], hoje);
+    var j = janelaAnalise_(dias);
+    if (!j || respondidos[rg + '|' + j.marco]) return;
+    var c = contatos[rg];
+    var email = c ? String(c['E-mail'] || '').trim() : '';
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { ignorados.semEmail++; return; }
+    if (porEmail[email.toLowerCase()] > 1) { ignorados.emailRepetido++; return; }
+    var doMarco = envios.filter(function (e) { return normRg_(e.rg_cbmerj) === rg && String(e.marco) === j.marco; });
+    var recente = doMarco.some(function (e) {
+      var q = ymd_(e.registrado_em);
+      return q && daysBetween_(q, hoje) < INTERVALO_MIN_DIAS;
+    });
+    if (recente) { ignorados.contatoRecente++; return; }
+    var emails = doMarco.filter(function (e) { return String(e.canal).indexOf('email') === 0; }).length;
+    if (emails > MAX_LEMBRETES) { ignorados.limite++; return; }
+    lista.push({ rg: rg, email: email, contato: c, marco: j.marco, inspecao: ref[rg],
+      prazo: somaDias_(ref[rg], j.fim), tipo: emails === 0 && doMarco.length === 0 ? 'convite' : 'lembrete' });
+  });
+  return { hoje: hoje, lista: lista, ignorados: ignorados };
+}
+
+function mensagemEmail_(item) {
+  var form = PropertiesService.getScriptProperties().getProperty('FORM_URL') || FORM_URL_PADRAO;
+  var abertura = item.tipo === 'convite'
+    ? 'Está aberto o seu questionário de acompanhamento do marco ' + item.marco + '.'
+    : 'Lembrete: o seu questionário de acompanhamento do marco ' + item.marco + ' ainda está aberto.';
+  return {
+    assunto: (item.tipo === 'convite' ? '' : 'Lembrete: ') + 'Programa Coração de Herói — questionário do marco ' + item.marco,
+    corpo: 'Olá, ' + tratamento_(item.contato) + '!\n\n' +
+      'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n' +
+      abertura + ' Leva cerca de 10 minutos e pode ser respondido até ' + ddmmaaaa_(item.prazo) + '.\n\n' +
+      'Ao preencher, informe a data da sua Inspeção de Saúde: ' + ddmmaaaa_(item.inspecao) + '.\n\n' +
+      'Link: ' + form + '\n\n' +
+      'Obrigado pela participação!\n' + NOME_REMETENTE + '\n\n' +
+      'Se já respondeu, desconsidere esta mensagem. Para não receber mais estes lembretes, responda este e-mail.'
+  };
+}
+
+/** Prévia: registra no log quem receberia e-mail agora, sem enviar nada. */
+function previaEmailsSemanais() {
+  var sel = selecionarEmailsSemanais_();
+  Logger.log('Prévia de ' + sel.hoje + ': ' + sel.lista.length + ' e-mail(s) seriam enviados.');
+  sel.lista.forEach(function (i) {
+    Logger.log('  ' + i.tipo + ' · RG •••' + i.rg.slice(-3) + ' · ' + i.marco + ' · prazo ' + ddmmaaaa_(i.prazo));
+  });
+  Logger.log('Não enviados: ' + JSON.stringify(sel.ignorados) + ' (sem e-mail, e-mail repetido, contato nos últimos ' +
+    INTERVALO_MIN_DIAS + ' dias, limite de lembretes atingido).');
+  return sel;
+}
+
+/** Envio semanal: convite para quem entrou na janela e lembretes para quem não respondeu. */
+function enviarEmailsSemanais() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sel = selecionarEmailsSemanais_();
+    var opcoes = { name: NOME_REMETENTE, replyTo: EMAIL_PROGRAMA };
+    var conta = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+    var modo;
+    if (conta === EMAIL_PROGRAMA) {
+      modo = 'conta do programa';
+    } else if (GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); }).indexOf(EMAIL_PROGRAMA) >= 0) {
+      opcoes.from = EMAIL_PROGRAMA;
+      modo = 'apelido "Enviar e-mail como" do programa';
+    } else {
+      modo = 'conta ' + conta + ' com nome do programa (respostas para ' + EMAIL_PROGRAMA + ')';
+    }
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var envios = ss.getSheetByName(ENVIOS_SHEET) || ss.insertSheet(ENVIOS_SHEET);
+    if (envios.getLastRow() === 0) envios.appendRow(['registrado_em', 'rg_cbmerj', 'marco', 'canal']);
+    var enviados = 0, falhas = 0;
+    for (var k = 0; k < sel.lista.length; k++) {
+      if (MailApp.getRemainingDailyQuota() < 1) {
+        Logger.log('Cota diária de e-mail esgotada: ' + (sel.lista.length - k) + ' ficam para a próxima execução.');
+        break;
+      }
+      var item = sel.lista[k], msg = mensagemEmail_(item);
+      try {
+        GmailApp.sendEmail(item.email, msg.assunto, msg.corpo, opcoes);
+        envios.appendRow([new Date().toISOString(), item.rg, item.marco, 'email-auto']);
+        enviados++;
+      } catch (err) {
+        falhas++;
+        Logger.log('Falha no envio para RG •••' + item.rg.slice(-3) + ': ' + err);
+      }
+    }
+    Logger.log('Envio semanal ' + sel.hoje + ' (' + modo + '): ' + enviados + ' enviado(s), ' + falhas +
+      ' falha(s). Não enviados: ' + JSON.stringify(sel.ignorados));
+    return { enviados: enviados, falhas: falhas, modo: modo };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Rodar UMA VEZ pela conta que vai enviar: agenda enviarEmailsSemanais toda segunda às 8h. */
+function instalarEnvioSemanal() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'enviarEmailsSemanais') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('enviarEmailsSemanais').timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(8).inTimezone('America/Sao_Paulo').create();
+  Logger.log('Envio semanal agendado: segundas-feiras, 8h (horário de Brasília), pela conta ' +
+    Session.getEffectiveUser().getEmail() + '.');
+}
+
+/** Cancela o envio semanal automático. */
+function desinstalarEnvioSemanal() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'enviarEmailsSemanais') ScriptApp.deleteTrigger(t);
+  });
+  Logger.log('Envio semanal cancelado.');
 }
