@@ -1398,7 +1398,9 @@ function tratamento(c){
 function mensagemConvite(c,item){
   const form=new URL('index.html',location.href).href;
   return 'Olá, '+tratamento(c)+'! Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
-    +'Está aberto o seu questionário de acompanhamento do marco '+item.marco+'. Leva cerca de 10 minutos e pode ser respondido até '+fmtData(item.fimData)+'.\n\n'
+    +'Está aberto o seu questionário de acompanhamento do marco '+item.marco+'.\n\n'
+    +'Sua resposta é muito importante: é com ela que acompanhamos a evolução da sua saúde ao longo do programa e melhoramos o cuidado oferecido a você e aos demais bombeiros. Cada resposta conta.\n\n'
+    +'Leva cerca de 10 minutos e pode ser respondido até '+fmtData(item.fimData)+'.\n\n'
     +'Ao preencher, informe a data da sua Inspeção de Saúde: '+fmtData(item.inspecaoData)+'.\n\n'
     +'Link: '+form+'\n\nObrigado pela participação!';
 }
@@ -1458,7 +1460,7 @@ function renderEnvios(){
     const prazo=i.situacao==='proximo'?'abre em '+fmtData(i.inicioData):'até '+fmtData(i.fimData)+' · '+(i.restam===0?'último dia':'faltam '+i.restam+' dia(s)');
     let sit='<span class="tag '+i.situacao+'">'+rotulo[i.situacao]+'</span>';
     if(i.situacao==='respondido'){const t=Date.parse(i.respondida.registrado_em_servidor||i.respondida.carimbo_iso||'');if(Number.isFinite(t))sit+='<br><small>'+fmtData(new Date(t))+'</small>';}
-    else if(i.ultimo){sit+='<br><small>'+(i.situacao==='enviado'?'':'último envio ')+fmtData(new Date(i.ultimo.quando))+' · '+(i.ultimo.canal==='email'?'e-mail':'WhatsApp')+(i.nEnvios>1?' ('+i.nEnvios+'x)':'')+'</small>';}
+    else if(i.ultimo){sit+='<br><small>'+(i.situacao==='enviado'?'':'último envio ')+fmtData(new Date(i.ultimo.quando))+' · '+({email:'e-mail','email-auto':'e-mail automático',whatsapp:'WhatsApp'}[i.ultimo.canal]||i.ultimo.canal)+(i.nEnvios>1?' ('+i.nEnvios+'x)':'')+'</small>';}
     let btn='—';
     if(i.c&&i.situacao!=='respondido'){
       const msg=mensagemConvite(i.c,i);
@@ -1474,7 +1476,7 @@ function renderEnvios(){
   const semData=Object.keys(CTRL.inspecoes).length===0;
   document.getElementById('sendNote').textContent=semData
     ?'Sem datas oficiais de Inspeção carregadas: implante o Code.gs atualizado e crie as abas Inspecoes e Contatos na planilha.'
-    :'Canal sugerido (contorno amarelo): e-mail quando houver e-mail válido e exclusivo; senão, WhatsApp. O registro do envio é gravado na aba Envios da planilha ao clicar no botão.';
+    :'Canal sugerido (contorno amarelo): e-mail quando houver e-mail válido e exclusivo; senão, WhatsApp. O registro do envio é gravado na aba Envios da planilha ao clicar no botão. Se o e-mail automático estiver ativo, quem tem e-mail recebe o convite e até 2 lembretes, com intervalo de 3 dias; esses envios aparecem aqui como “e-mail automático”.';
 }
 document.addEventListener('click',function(ev){
   const a=ev.target.closest&&ev.target.closest('a.send-btn');

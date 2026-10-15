@@ -67,6 +67,12 @@ envio na aba `Envios` (`action=envio`, exige token) e baixa automática quando a
 Requer a aba `Contatos` na planilha do piloto. Contatos são dados pessoais: ficam **somente** na
 planilha, nunca neste repositório.
 
+O `Code.gs` também traz o **e-mail automático** (convite + até 2 lembretes por marco, intervalo
+de 3 dias, execução diária às 8h; ver README da produção). No piloto, antes de ativar com
+`instalarEnvioAutomatico()`,
+crie a propriedade do script `FORM_URL` com o link do formulário do piloto
+(`https://ricardodesouzacarvalho.github.io/coracao-de-heroi-dev/`) e use apenas contatos de teste.
+
 ### Respostas repetidas
 
 Não há bloqueio: o mesmo RG pode responder mais de uma vez o mesmo marco. Nas estatísticas do
