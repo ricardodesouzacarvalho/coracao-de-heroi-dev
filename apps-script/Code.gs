@@ -356,10 +356,17 @@ function corrigirInspecoesExistentes() {
     });
     var stats = { comReferencia: 0, semReferencia: 0, marcoAlterado: 0, antesDaInspecao: 0, semDataResposta: 0 };
     var seen = {}, repetidas = [];
+    /* Só estas colunas são regravadas; todas as outras células ficam exatamente como estavam
+       (inclusive colunas com cabeçalho vazio ou repetido, que não podem ser lidas por nome). */
+    var CAMPOS = ['data_inspecao', 'data_inspecao_informada', 'data_inspecao_fonte', 'rg_no_programa',
+      'dias_desde_inspecao', 'momento_avaliacao', 'estrato_dias', 'marco_programa',
+      'marco_programa_bruto', 'janela_aplicacao_recomendada'];
     var out = [head];
     for (var r = 1; r < values.length; r++) {
       var rec = {};
-      head.forEach(function (k, i) { rec[k] = i < values[r].length ? values[r][i] : ''; });
+      head.forEach(function (k, i) {
+        if (k !== '' && !(k in rec)) rec[k] = i < values[r].length ? values[r][i] : '';
+      });
       var antes = String(rec.marco_programa);
       var answerYmd = ymd_(rec.registrado_em_servidor) || ymd_(rec.carimbo_iso) || ymd_(rec.carimbo_data_hora);
       if (!answerYmd) stats.semDataResposta++;
@@ -375,7 +382,12 @@ function corrigirInspecoesExistentes() {
         if (seen[key]) repetidas.push('linha ' + (r + 1) + ' repete a linha ' + seen[key] + ' (RG •••' + normRg_(rec.rg_cbmerj).slice(-3) + ', marco ' + rec.marco_programa + ')');
         else seen[key] = r + 1;
       }
-      out.push(head.map(function (k) { return rec[k] === undefined ? '' : rec[k]; }));
+      var linha = head.map(function (k, i) { return i < values[r].length ? values[r][i] : ''; });
+      CAMPOS.forEach(function (k) {
+        var i = head.indexOf(k);
+        if (i >= 0 && rec[k] !== undefined) linha[i] = rec[k];
+      });
+      out.push(linha);
     }
     sh.getRange(1, 1, out.length, head.length).setValues(out);
     Logger.log('Backup criado na aba: ' + backup.getName());
