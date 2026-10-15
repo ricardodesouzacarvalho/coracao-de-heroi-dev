@@ -140,9 +140,9 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
         <span><i style="background:var(--blue)"></i>Saúde física</span>
         <span><i style="background:var(--gold)"></i>Saúde mental</span>
         <span><i style="background:var(--gray)"></i>Referência 50</span>
-        <span><i style="border:2px solid var(--muted);background:#fff"></i>Marcadores vazados = respostas “Fora dos marcos” (posicionadas pelo dia real)</span>
+        <span><i style="border:2px solid var(--muted);background:#fff"></i>Marcadores vazados = marcos intermediários 45/135/225 dias (só no gráfico)</span>
       </div>
-      <p class="score-note">T-scores estimados pela tabela de conversão do escore bruto. A redação local dos itens 1, 2 e 6 deve ser validada antes de comparações externas definitivas. O eixo horizontal representa o tempo (dias desde a Inspeção); os marcadores vazados posicionam cada resposta colhida fora das janelas no seu dia real, sem alterar a linha dos marcos oficiais (0/90/180/270). Passe o cursor sobre um marcador para ver o dia e o T-score.</p>
+      <p class="score-note">T-scores estimados pela tabela de conversão do escore bruto. A redação local dos itens 1, 2 e 6 deve ser validada antes de comparações externas definitivas. O eixo horizontal representa o tempo (dias desde a Inspeção). Os marcos intermediários de 45, 135 e 225 dias (marcadores vazados) aglutinam as respostas colhidas nos vãos entre as janelas oficiais (22–49, 131–139 e 221–229 dias) e entram apenas neste gráfico: ficam fora dos indicadores do topo, da evolução pareada e da comparação independente. Com o chip “Fora dos marcos” ligado, cada resposta fora das janelas aparece também como ponto avulso no seu dia real. Passe o cursor sobre um marcador para ver o n e o T-score.</p>
       <h3>Evolução pareada por participante</h3>
       <div id="pairedDeltas"></div>
       <h3>Comparação independente entre marcos</h3>
@@ -220,6 +220,17 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       </div>
       <p class="score-note" id="followupNote"></p>
     </section>
+    <section class="panel wide" id="auditPanel">
+      <h2>Auditoria · RGs fora do programa</h2>
+      <p class="panel-sub">Respostas com RG que não consta da lista de Inspeções do programa (provável erro de digitação ou participante não incluído). Ficam fora de todas as análises deste painel até a divergência ser resolvida. Identificadores mascarados: confira na base restrita pela data e hora de registro.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Identificador</th><th>Registrado em</th><th>Inspeção informada</th><th>Dias</th><th>Marco informado</th><th>Situação</th></tr></thead>
+          <tbody id="auditRows"></tbody>
+        </table>
+      </div>
+      <p class="score-note" id="auditNote"></p>
+    </section>
   </div>
 </main>
 <footer>PROMIS Global Health v1.2 · T-scores por conversão de escore bruto · Dados assistenciais devem permanecer em ambiente restrito</footer>
@@ -235,6 +246,7 @@ const MARKERS=[
 const ACTIVE=new Set(MARKERS.map(function(m){return m.key;}));
 const TOKEN_KEY='dash_promis_chave';
 let DATA=[];
+let AUDIT=[];
 let DEMO=false;
 
 /* Escores PROMIS (bruto, recodificação da dor e T-score) são calculados exclusivamente
@@ -274,14 +286,60 @@ function markerOf(r){
   if(code===0)return 'Inicial';if(code===90)return '90 dias';if(code===180)return '180 dias';if(code===270)return '270 dias';
   return 'Fora dos marcos';
 }
+/* Marcos intermediários 45/135/225 dias — usados SOMENTE no gráfico de evolução do PROMIS.
+   Aglutinam as respostas dos vãos entre as janelas oficiais (22-49, 131-139 e 221-229 dias).
+   Essas respostas continuam com marker "Fora dos marcos", portanto ficam fora dos KPIs,
+   da evolução pareada, da comparação independente e da participação por marco. */
+const INTERMEDIATE_DAYS=[45,135,225];
+function intermediateOf(r){
+  if(r.marker!=='Fora dos marcos')return null;
+  const d=num(r.dias_desde_inspecao);
+  if(d!==null&&d>=0){
+    if(d>=22&&d<=49)return 45;
+    if(d>=131&&d<=139)return 135;
+    if(d>=221&&d<=229)return 225;
+    return null;
+  }
+  const m=String(r.momento_avaliacao||r.marco_programa_bruto||'').toLowerCase();
+  if(m.indexOf('inicial e 90')>=0)return 45;
+  if(m.indexOf('90 e 180')>=0)return 135;
+  if(m.indexOf('180 e 270')>=0)return 225;
+  return null;
+}
 function prepare(r){
   /* T-scores chegam prontos da planilha (calculados pelo Code.gs na gravação).
      Linha sem T-score fica com null e é ignorada pelas médias e testes. */
-  return Object.assign({},r,{
+  const row=Object.assign({},r,{
     marker:markerOf(r),
     physicalT:num(r.promis_global_fisica_tscore),
     mentalT:num(r.promis_global_mental_tscore)
   });
+  row.intermediate=intermediateOf(row);
+  return row;
+}
+/* Respostas repetidas: sem bloqueio no envio, o mesmo RG pode responder mais de uma vez o
+   mesmo marco oficial. Nas estatísticas (KPIs, gráfico, PREMs, evolução pareada, comparação
+   independente, participação) vale a PRIMEIRA resposta de cada RG por marco, pela ordem de
+   registro; as seguintes ficam com repeat=true e só entram na triagem assistencial. */
+/* Programa fechado: rg_no_programa = 'Não' (gravado pelo Code.gs quando o RG não consta da
+   lista de Inspeções) tira a resposta de TODAS as análises e a envia para a auditoria. */
+function outOfProgram(r){const v=String(r.rg_no_programa||'').trim().toLowerCase();return v==='não'||v==='nao';}
+function splitAudit(rows){
+  AUDIT=rows.filter(outOfProgram);
+  return markRepeats(rows.filter(function(r){return !outOfProgram(r);}));
+}
+function markRepeats(rows){
+  const ts=function(r,i){const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'');return Number.isFinite(t)?t:i;};
+  const order=rows.map(function(r,i){return {r:r,t:ts(r,i),i:i};}).sort(function(a,b){return a.t-b.t||a.i-b.i;});
+  const seen={};
+  order.forEach(function(o){
+    const id=String(o.r.rg_cbmerj||'').replace(/\D/g,'');
+    o.r.repeat=false;
+    if(!id||o.r.marker==='Fora dos marcos')return;
+    const key=id+'|'+o.r.marker;
+    if(seen[key])o.r.repeat=true;else seen[key]=true;
+  });
+  return rows;
 }
 function compatible(r){
   return [r.promis_global01,r.promis_global_fisica_bruto,r.promis_global_mental_bruto]
@@ -291,15 +349,18 @@ function compatible(r){
 function seeded(seed){let x=seed>>>0;return function(){x=(1664525*x+1013904223)>>>0;return x/4294967296;};}
 function pick(arr,r){return arr[Math.min(arr.length-1,Math.floor(r()*arr.length))];}
 function generateDemo(){
-  const random=seeded(20260711),rows=[],plan=[['Inicial',38],['90 dias',37],['180 dias',36],['270 dias',34],['Fora dos marcos',4]];
+  const random=seeded(20260711),rows=[],plan=[['Inicial',38],['90 dias',37],['180 dias',36],['270 dias',34],['Fora dos marcos',13]];
   const always=['Sempre','Na maioria das vezes','Às vezes','Raramente','Nunca'];
   const coord=['Muito bem integrada','Bem integrada','Nem integrada nem desorganizada','Pouco integrada','Desorganizada'];
   const professional=['Excelente','Boa','Regular','Ruim','Muito ruim','Não tive consulta ou não se aplica'];
   const location=['Somente no CBMERJ','Somente fora do CBMERJ pelo SUS','Somente fora do CBMERJ por plano ou particular','Parte no CBMERJ e parte fora','Ainda não iniciei os exames'];
   const exams=['ECOTT','Doppler','Ergometria','MAPA','HOLTER','Exames laboratoriais','ECC'];
   plan.forEach(function(entry,mi){
-    const marker=entry[0],count=entry[1],progress=Math.min(mi,3);
+    const marker=entry[0],count=entry[1];
+    const gapDays=[28,40,47,133,137,223,228,330];
     for(let i=0;i<count;i++){
+      const dayVal=marker==='Fora dos marcos'?gapDays[i%gapDays.length]:(marker==='Inicial'?5:marker==='90 dias'?90:marker==='180 dias'?180:270);
+      const progress=marker==='Fora dos marcos'?Math.min(dayVal/90,3):Math.min(mi,3);
       const q=clamp(Math.round(1.7+progress*.65+random()*2.2),1,5);
       const pRaw=clamp(Math.round(10.5+progress*1.45+(random()-.5)*5),4,20);
       const mRaw=clamp(Math.round(11.5+progress*.8+(random()-.5)*5),4,20);
@@ -309,8 +370,6 @@ function generateDemo(){
       const nps=clamp(Math.round(6.2+progress*.7+(random()-.5)*4),0,10);
       const local=pick(location,random);
       const favorable=Math.max(0,Math.min(4,4-q));
-      const gapDays=[40,135,225,330];
-      const dayVal=marker==='Fora dos marcos'?gapDays[i%gapDays.length]:(marker==='Inicial'?5:marker==='90 dias'?90:marker==='180 dias'?180:270);
       rows.push({
         rg_cbmerj:'P'+String(i+1).padStart(4,'0'),
         momento_avaliacao:marker,
@@ -350,6 +409,8 @@ function generateDemo(){
       });
     }
   });
+  /* duas respostas com RG fora do programa, para a seção de auditoria */
+  [0,40].forEach(function(src,k){rows.push(Object.assign({},rows[src],{rg_cbmerj:'X90'+k,rg_no_programa:'Não',registrado_em_servidor:'2026-07-1'+(4+k)+'T14:00:00.000Z',data_inspecao:'2026-06-02',versao_formulario:k?'...-programa-fechado':'...-janelas-21-40'}));});
   return rows.map(prepare);
 }
 
@@ -385,8 +446,8 @@ function hideGate(){
   document.querySelector('.dashboard-grid').style.display='grid';
 }
 function enterDemo(note){
-  DATA=generateDemo();DEMO=true;
-  setSource('Demonstração · 149 respostas',true);
+  DATA=splitAudit(generateDemo());DEMO=true;
+  setSource('Demonstração · '+(DATA.length+AUDIT.length)+' respostas',true);
   document.getElementById('statusMsg').textContent=note||'';
   hideGate();render();
 }
@@ -408,9 +469,9 @@ async function tryLoad(token){
     }
     const compatibleRows=rowsFromSheet(raw.values).filter(compatible);
     if(!compatibleRows.length){enterDemo('Fonte conectada, ainda sem respostas compatíveis; exibindo simulação.');return;}
-    DATA=compatibleRows.map(prepare);DEMO=false;
+    DATA=splitAudit(compatibleRows.map(prepare));DEMO=false;
     setSource('Dados conectados',false);
-    document.getElementById('statusMsg').textContent=DATA.length+' respostas carregadas · '+new Date().toLocaleString('pt-BR');
+    document.getElementById('statusMsg').textContent=compatibleRows.length+' respostas carregadas'+(AUDIT.length?' · '+AUDIT.length+' em auditoria (RG fora do programa)':'')+' · '+new Date().toLocaleString('pt-BR');
     hideGate();render();
   }catch(e){
     showGate('Fonte indisponível no momento. Tente novamente ou veja a demonstração.');
@@ -437,8 +498,8 @@ document.getElementById('authEnter').addEventListener('click',function(){
 document.getElementById('authInput').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('authEnter').click();});
 document.getElementById('authDemo').addEventListener('click',function(){enterDemo('Demonstração aberta a partir da tela de acesso.');});
 document.getElementById('logoutBtn').addEventListener('click',function(){sessionStorage.removeItem(TOKEN_KEY);DATA=[];showGate('Sessão encerrada.');});
-function filtered(){return DATA.filter(function(r){return ACTIVE.has(r.marker);});}
-function markerData(marker){return DATA.filter(function(r){return r.marker===marker;});}
+function filtered(){return DATA.filter(function(r){return ACTIVE.has(r.marker)&&!r.repeat;});}
+function markerData(marker){return DATA.filter(function(r){return r.marker===marker&&!r.repeat;});}
 function avgField(rows,field){return mean(rows.map(function(r){return num(r[field]);}));}
 function pct(rows,fn){return rows.length?Math.round(rows.filter(fn).length/rows.length*100):0;}
 
@@ -462,7 +523,7 @@ function render(){
   /* rowsProcesso: indicadores de experiência/processo/adesão SEMPRE contam as respostas
      "Fora dos marcos" (independente do chip), pois não dependem da janela temporal exata.
      Os marcos oficiais continuam obedecendo aos chips. */
-  const rowsProcesso=DATA.filter(function(r){return ACTIVE.has(r.marker)||r.marker==='Fora dos marcos';});
+  const rowsProcesso=DATA.filter(function(r){return (ACTIVE.has(r.marker)||r.marker==='Fora dos marcos')&&!r.repeat;});
   renderKpis(rows);
   renderPromis();
   renderPrem(rowsProcesso);
@@ -472,7 +533,9 @@ function render(){
   renderParticipation(rows);
   renderPaired();
   renderIndependent();
-  renderFollowup(rows);
+  /* triagem assistencial inclui respostas repetidas: um sinal novo não pode ficar oculto */
+  renderFollowup(DATA.filter(function(r){return ACTIVE.has(r.marker);}));
+  renderAudit();
 }
 
 function renderKpis(rows){
@@ -502,10 +565,12 @@ function renderPromis(){
   const foraActive=ACTIVE.has('Fora dos marcos');
   const foraRows=foraActive?markerData('Fora dos marcos'):[];
   const hasFora=foraRows.length>0;
-  if(!selected.length&&!hasFora){document.getElementById('promisEvolution').innerHTML='<div class="empty">'+(foraActive&&!selected.length?'Sem respostas para os marcos selecionados.':'Selecione ao menos um marco principal.')+'</div>';return;}
-  /* Eixo x agora é temporal (dias desde a Inspeção). Os marcos oficiais ficam ancorados
-     nos dias nominais 0/90/180/270 — a linha deles não muda. As respostas fora dos marcos
-     são posicionadas no seu dia real, como pontos avulsos (marcadores vazados). */
+  const interGroups=INTERMEDIATE_DAYS.map(function(day){return {day:day,rows:DATA.filter(function(r){return r.intermediate===day;})};}).filter(function(g){return g.rows.length>0;});
+  if(!selected.length&&!hasFora&&!interGroups.length){document.getElementById('promisEvolution').innerHTML='<div class="empty">'+(foraActive&&!selected.length?'Sem respostas para os marcos selecionados.':'Selecione ao menos um marco principal.')+'</div>';return;}
+  /* Eixo x é temporal (dias desde a Inspeção). Os marcos oficiais ficam ancorados nos dias
+     nominais 0/90/180/270; os marcos intermediários 45/135/225 aglutinam as respostas dos
+     vãos entre janelas. Com o chip "Fora dos marcos", cada resposta fora das janelas também
+     aparece no seu dia real, como ponto avulso. */
   const MARKER_DAY={'Inicial':0,'90 dias':90,'180 dias':180,'270 dias':270};
   const MAXDAY=300;
   const W=820,H=300,L=58,R=28,T=24,B=46,plotW=W-L-R,plotH=H-T-B;
@@ -527,22 +592,45 @@ function renderPromis(){
   [30,40,50,60,70].forEach(function(tick){const yy=y(tick);svg+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="'+(tick===50?'#78828c':'#dfe3e8')+'" stroke-width="'+(tick===50?1.6:1)+'"/><text x="'+(L-10)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="#687078">'+tick+'</text>';});
   /* guias verticais suaves e rótulos nos dias dos marcos oficiais */
   MARKERS.forEach(function(m){const xx=xDay(MARKER_DAY[m.key]);const n=markerData(m.key).length;svg+='<line x1="'+xx.toFixed(1)+'" y1="'+T+'" x2="'+xx.toFixed(1)+'" y2="'+(H-B)+'" stroke="#eef0f2" stroke-width="1"/><text x="'+xx.toFixed(1)+'" y="'+(H-17)+'" text-anchor="middle" font-size="11" fill="#687078">'+m.label+(ACTIVE.has(m.key)?' (n='+n+')':'')+'</text>';});
-  /* linha dos marcos oficiais — inalterada: só os ativos, ancorados no dia nominal */
+  /* guias tracejadas e rótulos (linha de cima, menor) dos marcos intermediários com dados */
+  interGroups.forEach(function(g){const xx=xDay(g.day);svg+='<line x1="'+xx.toFixed(1)+'" y1="'+T+'" x2="'+xx.toFixed(1)+'" y2="'+(H-B)+'" stroke="#e3e6ea" stroke-width="1" stroke-dasharray="3 4"/><text x="'+xx.toFixed(1)+'" y="'+(H-31)+'" text-anchor="middle" font-size="10" font-style="italic" fill="#8a929a">'+g.day+' d (n='+g.rows.length+')</text>';});
+  /* linha: marcos oficiais ativos (ancorados no dia nominal) + marcos intermediários
+     45/135/225 (média das respostas dos vãos), em ordem de dia. Os intermediários entram
+     apenas no desenho; nenhuma estatística os utiliza. */
   const physical=[],mental=[];
-  MARKERS.forEach(function(m){if(!ACTIVE.has(m.key))return;const rows=markerData(m.key);const pv=mean(rows.map(function(r){return r.physicalT;})),mv=mean(rows.map(function(r){return r.mentalT;}));const xx=xDay(MARKER_DAY[m.key]);if(pv!==null)physical.push([xx,y(pv),pv]);if(mv!==null)mental.push([xx,y(mv),mv]);});
-  function path(points){return points.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ');}
+  function addPoint(day,rows,label,inter){const pv=mean(rows.map(function(r){return r.physicalT;})),mv=mean(rows.map(function(r){return r.mentalT;}));const xx=xDay(day);if(pv!==null)physical.push({day:day,x:xx,y:y(pv),v:pv,label:label,n:rows.length,inter:inter});if(mv!==null)mental.push({day:day,x:xx,y:y(mv),v:mv,label:label,n:rows.length,inter:inter});}
+  MARKERS.forEach(function(m){if(!ACTIVE.has(m.key))return;addPoint(MARKER_DAY[m.key],markerData(m.key),m.label,false);});
+  interGroups.forEach(function(g){addPoint(g.day,g.rows,g.day+' dias (intermediário)',true);});
+  function byDay(a,b){return a.day-b.day;}
+  physical.sort(byDay);mental.sort(byDay);
+  function path(points){return points.map(function(p,i){return (i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1);}).join(' ');}
   if(physical.length)svg+='<path d="'+path(physical)+'" fill="none" stroke="#1d5c96" stroke-width="3"/>';
   if(mental.length)svg+='<path d="'+path(mental)+'" fill="none" stroke="#b8890b" stroke-width="3"/>';
-  physical.forEach(function(p){svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="5" fill="#1d5c96"/><text x="'+p[0]+'" y="'+(p[1]+18)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#1d5c96">'+p[2].toFixed(1)+'</text>';});
-  mental.forEach(function(p){svg+='<rect x="'+(p[0]-4.5)+'" y="'+(p[1]-4.5)+'" width="9" height="9" fill="#b8890b"/><text x="'+p[0]+'" y="'+(p[1]-10)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#8a6908">'+p[2].toFixed(1)+'</text>';});
-  /* respostas "fora dos marcos": cada caso no seu dia real, marcadores vazados, sem linha.
-     Detalhe (dia e T-score) via tooltip nativo do SVG. */
+  /* marcos oficiais: marcadores cheios; intermediários: marcadores vazados maiores */
+  physical.forEach(function(p){const tip='<title>'+p.label+' · n='+p.n+' · T físico '+p.v.toFixed(1)+'</title>';svg+=(p.inter?'<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="5.5" fill="#fff" stroke="#1d5c96" stroke-width="2.5">'+tip+'</circle>':'<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="5" fill="#1d5c96">'+tip+'</circle>')+'<text x="'+p.x.toFixed(1)+'" y="'+(p.y+18).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="'+(p.inter?'400':'700')+'" fill="#1d5c96">'+p.v.toFixed(1)+'</text>';});
+  mental.forEach(function(p){const tip='<title>'+p.label+' · n='+p.n+' · T mental '+p.v.toFixed(1)+'</title>';svg+=(p.inter?'<rect x="'+(p.x-5).toFixed(1)+'" y="'+(p.y-5).toFixed(1)+'" width="10" height="10" fill="#fff" stroke="#b8890b" stroke-width="2.5">'+tip+'</rect>':'<rect x="'+(p.x-4.5).toFixed(1)+'" y="'+(p.y-4.5).toFixed(1)+'" width="9" height="9" fill="#b8890b">'+tip+'</rect>')+'<text x="'+p.x.toFixed(1)+'" y="'+(p.y-10).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="'+(p.inter?'400':'700')+'" fill="#8a6908">'+p.v.toFixed(1)+'</text>';});
+  /* chip "Fora dos marcos": cada resposta fora das janelas no seu dia real, como ponto
+     avulso pequeno e translúcido, sem linha. Detalhe (dia e T-score) via tooltip nativo. */
   foraRows.forEach(function(r){
     const day=foraDay(r),xx=xDay(day);
-    if(Number.isFinite(r.physicalT)){const yy=y(r.physicalT);svg+='<circle cx="'+xx.toFixed(1)+'" cy="'+yy.toFixed(1)+'" r="4" fill="#fff" stroke="#1d5c96" stroke-width="2"><title>Fora dos marcos · '+day+' dias · T físico '+r.physicalT.toFixed(1)+'</title></circle>';}
-    if(Number.isFinite(r.mentalT)){const yy=y(r.mentalT);svg+='<rect x="'+(xx-4).toFixed(1)+'" y="'+(yy-4).toFixed(1)+'" width="8" height="8" fill="#fff" stroke="#b8890b" stroke-width="2"><title>Fora dos marcos · '+day+' dias · T mental '+r.mentalT.toFixed(1)+'</title></rect>';}
+    if(Number.isFinite(r.physicalT)){const yy=y(r.physicalT);svg+='<circle cx="'+xx.toFixed(1)+'" cy="'+yy.toFixed(1)+'" r="3" fill="#fff" stroke="#1d5c96" stroke-width="1.5" opacity=".6"><title>Fora dos marcos · '+day+' dias · T físico '+r.physicalT.toFixed(1)+'</title></circle>';}
+    if(Number.isFinite(r.mentalT)){const yy=y(r.mentalT);svg+='<rect x="'+(xx-3).toFixed(1)+'" y="'+(yy-3).toFixed(1)+'" width="6" height="6" fill="#fff" stroke="#b8890b" stroke-width="1.5" opacity=".6"><title>Fora dos marcos · '+day+' dias · T mental '+r.mentalT.toFixed(1)+'</title></rect>';}
   });
   svg+='</svg>';
+  /* Resumo das respostas fora das janelas oficiais, para explicar a presença ou ausência
+     dos marcos intermediários (independe do chip e dos filtros). */
+  const foraAll=markerData('Fora dos marcos');
+  const nGap=foraAll.filter(function(r){return r.intermediate!==null;}).length;
+  const nAfter=foraAll.filter(function(r){const d=num(r.dias_desde_inspecao);return d!==null&&d>310;}).length;
+  const nBefore=foraAll.filter(function(r){const d=num(r.dias_desde_inspecao);return d!==null&&d<0;}).length;
+  const nOther=foraAll.length-nGap-nAfter-nBefore;
+  let note='Respostas fora das janelas oficiais: '+foraAll.length;
+  if(foraAll.length)note+=' — '+nGap+' nos vãos entre marcos (agrupadas em 45/135/225 dias), '+nAfter+' após 310 dias'+(nBefore?', '+nBefore+' antes da data oficial da Inspeção':'')+(nOther?', '+nOther+' sem dia registrado':'')+'.';
+  else note+='.';
+  const nRepeat=DATA.filter(function(r){return r.repeat;}).length;
+  if(nRepeat)note+=' '+nRepeat+' resposta(s) repetida(s) do mesmo RG no mesmo marco: nas estatísticas vale a primeira de cada RG.';
+  if(!nGap)note+=' Nenhuma resposta nos vãos de 22–49, 131–139 ou 221–229 dias até o momento; os marcos intermediários aparecem quando houver.';
+  svg+='<p class="score-note" id="promisInterNote">'+note+'</p>';
   document.getElementById('promisEvolution').innerHTML=svg;
 }
 
@@ -688,7 +776,7 @@ function pairedDeltas(){
   const byId={};
   DATA.forEach(function(r){
     const id=String(r.rg_cbmerj||'').trim();
-    if(!id||r.marker==='Fora dos marcos')return;
+    if(!id||r.marker==='Fora dos marcos'||r.repeat)return;
     if(!byId[id])byId[id]={};
     if(!byId[id][r.marker])byId[id][r.marker]=r;
   });
@@ -1266,6 +1354,20 @@ function followupSignals(r){
   if(r.tabaco_status==='Fumante atual'&&['Não houve oferta de tratamento','Tive interesse, mas não iniciei'].includes(r.tabaco_conduta)){signals.push('cessação do tabagismo');score+=1;}
   return {signals:signals,score:score};
 }
+function renderAudit(){
+  const rows=AUDIT.slice().sort(function(a,b){return String(b.registrado_em_servidor||b.carimbo_iso||'').localeCompare(String(a.registrado_em_servidor||a.carimbo_iso||''));});
+  const fmtWhen=function(r){const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'');return Number.isFinite(t)?new Date(t).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):esc(r.carimbo_data_hora||'—');};
+  const fmtDate=function(v){const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+'/'+m[2]+'/'+m[1];const t=Date.parse(v);return Number.isFinite(t)?new Date(t).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):esc(v||'—');};
+  /* formulários a partir da regra de programa fechado orientam o participante a contatar a equipe */
+  const oriented=function(r){return String(r.versao_formulario||'').indexOf('programa-fechado')>=0;};
+  document.getElementById('auditRows').innerHTML=rows.length?rows.map(function(r){
+    const d=num(r.dias_desde_inspecao);
+    return '<tr><td>'+esc(maskedId(r.rg_cbmerj))+'</td><td>'+fmtWhen(r)+'</td><td>'+fmtDate(r.data_inspecao)+'</td><td>'+(d===null?'—':d)+'</td><td>'+esc(r.momento_avaliacao||r.marco_programa||'—')+'</td><td>'+(oriented(r)?'Orientado a contatar pelo WhatsApp':'Resposta anterior à regra: contatar o participante')+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" class="empty">Nenhuma resposta com RG fora do programa.</td></tr>';
+  const nRg=new Set(rows.map(function(r){return String(r.rg_cbmerj||'').replace(/\D/g,'');})).size;
+  document.getElementById('auditNote').textContent=rows.length?rows.length+' resposta(s) de '+nRg+' RG(s) fora do programa, excluídas das análises. Ao confirmar o RG correto, corrija-o na planilha (ou inclua o RG na aba Inspecoes) e rode corrigirInspecoesExistentes().':'';
+}
+
 function renderFollowup(rows){
   const all=rows.map(function(r){return {row:r,alert:followupSignals(r)};}).filter(function(x){return x.alert.score>=2;}).sort(function(a,b){return b.alert.score-a.alert.score;});
   const list=all.slice(0,15);
