@@ -31,9 +31,9 @@
  *    cabeçalho RG | Nome | Posto/Graduação | Telefone_WhatsApp | Link_WhatsApp | E-mail | Observação.
  *    Dados pessoais: ficam só na planilha e só saem pelo action=data, que exige o token.
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
- * 7. E-mail semanal automático (opcional): rode uma vez instalarEnvioSemanal() pela conta que
- *    vai enviar. Para conferir sem enviar nada, rode previaEmailsSemanais(). Na planilha do
- *    piloto, crie a propriedade do script FORM_URL com o link do formulário do piloto.
+ * 7. E-mail automático a cada 3 dias (opcional): rode uma vez instalarEnvioAutomatico() pela
+ *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(). Na
+ *    planilha do piloto, crie a propriedade do script FORM_URL com o link do formulário do piloto.
  */
 
 var SHEET_NAME = 'Respostas';
@@ -41,12 +41,12 @@ var INSPECOES_SHEET = 'Inspecoes';
 var CONTATOS_SHEET = 'Contatos';
 var ENVIOS_SHEET = 'Envios';
 
-/* ---- E-mail semanal ---- */
+/* ---- E-mail automático (roda todo dia; cada militar recebe no máximo 1 contato a cada 3 dias) ---- */
 var EMAIL_PROGRAMA = 'coracaodeheroi.1polcampinho@gmail.com';
 var NOME_REMETENTE = 'Programa Coração de Herói';
 var FORM_URL_PADRAO = 'https://ricardodesouzacarvalho.github.io/coracao-de-heroi/';
 var MAX_LEMBRETES = 2;          // além do convite, por marco
-var INTERVALO_MIN_DIAS = 6;     // sem novo contato (qualquer canal) antes disso
+var INTERVALO_MIN_DIAS = 3;     // dias entre contatos ao mesmo militar (qualquer canal)
 /* Janelas de ANÁLISE — as mesmas do dashboard (Inicial ampliado para 0-60 dias). */
 var JANELAS_ANALISE = [
   { marco: 'Inicial', ini: 0, fim: 60 },
@@ -469,7 +469,7 @@ function corrigirInspecoesExistentes() {
   }
 }
 
-/* ===================== E-mail semanal automático ===================== */
+/* ===================== E-mail automático (a cada 3 dias) ===================== */
 
 function janelaAnalise_(dias) {
   for (var i = 0; i < JANELAS_ANALISE.length; i++) {
@@ -512,8 +512,8 @@ function tratamento_(c) {
   return (posto ? posto + ' ' : '') + curto;
 }
 
-/** Lista quem deve receber e-mail nesta semana (convite ou lembrete). Não envia nada. */
-function selecionarEmailsSemanais_() {
+/** Lista quem deve receber e-mail hoje (convite ou lembrete). Não envia nada. */
+function selecionarEmailsAutomaticos_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var hoje = todayYmd_();
   var ref = inspecoesRef_();
@@ -559,12 +559,15 @@ function mensagemEmail_(item) {
   var form = PropertiesService.getScriptProperties().getProperty('FORM_URL') || FORM_URL_PADRAO;
   var abertura = item.tipo === 'convite'
     ? 'Está aberto o seu questionário de acompanhamento do marco ' + item.marco + '.'
-    : 'Lembrete: o seu questionário de acompanhamento do marco ' + item.marco + ' ainda está aberto.';
+    : 'Ainda não recebemos a sua resposta ao questionário do marco ' + item.marco + ', e ela faz muita falta.';
   return {
-    assunto: (item.tipo === 'convite' ? '' : 'Lembrete: ') + 'Programa Coração de Herói — questionário do marco ' + item.marco,
+    assunto: (item.tipo === 'convite' ? '' : 'Lembrete: ') + 'Programa Coração de Herói — sua resposta é importante (marco ' + item.marco + ')',
     corpo: 'Olá, ' + tratamento_(item.contato) + '!\n\n' +
       'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n' +
-      abertura + ' Leva cerca de 10 minutos e pode ser respondido até ' + ddmmaaaa_(item.prazo) + '.\n\n' +
+      abertura + '\n\n' +
+      'Sua resposta é muito importante: é com ela que acompanhamos a evolução da sua saúde ao longo do ' +
+      'programa e melhoramos o cuidado oferecido a você e aos demais bombeiros. Cada resposta conta.\n\n' +
+      'Leva cerca de 10 minutos e pode ser respondido até ' + ddmmaaaa_(item.prazo) + '.\n\n' +
       'Ao preencher, informe a data da sua Inspeção de Saúde: ' + ddmmaaaa_(item.inspecao) + '.\n\n' +
       'Link: ' + form + '\n\n' +
       'Obrigado pela participação!\n' + NOME_REMETENTE + '\n\n' +
@@ -573,8 +576,8 @@ function mensagemEmail_(item) {
 }
 
 /** Prévia: registra no log quem receberia e-mail agora, sem enviar nada. */
-function previaEmailsSemanais() {
-  var sel = selecionarEmailsSemanais_();
+function previaEmailsAutomaticos() {
+  var sel = selecionarEmailsAutomaticos_();
   Logger.log('Prévia de ' + sel.hoje + ': ' + sel.lista.length + ' e-mail(s) seriam enviados.');
   sel.lista.forEach(function (i) {
     Logger.log('  ' + i.tipo + ' · RG •••' + i.rg.slice(-3) + ' · ' + i.marco + ' · prazo ' + ddmmaaaa_(i.prazo));
@@ -584,12 +587,12 @@ function previaEmailsSemanais() {
   return sel;
 }
 
-/** Envio semanal: convite para quem entrou na janela e lembretes para quem não respondeu. */
-function enviarEmailsSemanais() {
+/** Envio diário: convite para quem entrou na janela e lembretes (a cada 3 dias) para quem não respondeu. */
+function enviarEmailsAutomaticos() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var sel = selecionarEmailsSemanais_();
+    var sel = selecionarEmailsAutomaticos_();
     var opcoes = { name: NOME_REMETENTE, replyTo: EMAIL_PROGRAMA };
     var conta = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
     var modo;
@@ -620,7 +623,7 @@ function enviarEmailsSemanais() {
         Logger.log('Falha no envio para RG •••' + item.rg.slice(-3) + ': ' + err);
       }
     }
-    Logger.log('Envio semanal ' + sel.hoje + ' (' + modo + '): ' + enviados + ' enviado(s), ' + falhas +
+    Logger.log('Envio automático ' + sel.hoje + ' (' + modo + '): ' + enviados + ' enviado(s), ' + falhas +
       ' falha(s). Não enviados: ' + JSON.stringify(sel.ignorados));
     return { enviados: enviados, falhas: falhas, modo: modo };
   } finally {
@@ -628,21 +631,25 @@ function enviarEmailsSemanais() {
   }
 }
 
-/** Rodar UMA VEZ pela conta que vai enviar: agenda enviarEmailsSemanais toda segunda às 8h. */
-function instalarEnvioSemanal() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'enviarEmailsSemanais') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('enviarEmailsSemanais').timeBased()
-    .onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(8).inTimezone('America/Sao_Paulo').create();
-  Logger.log('Envio semanal agendado: segundas-feiras, 8h (horário de Brasília), pela conta ' +
-    Session.getEffectiveUser().getEmail() + '.');
+/** Rodar UMA VEZ pela conta que vai enviar: agenda enviarEmailsAutomaticos todo dia às 8h.
+ *  Cada militar recebe no máximo um contato a cada INTERVALO_MIN_DIAS (3) dias. */
+function instalarEnvioAutomatico() {
+  removerAgendamentos_();
+  ScriptApp.newTrigger('enviarEmailsAutomaticos').timeBased()
+    .everyDays(1).atHour(8).inTimezone('America/Sao_Paulo').create();
+  Logger.log('Envio automático agendado: todos os dias, 8h (horário de Brasília), com intervalo de ' +
+    INTERVALO_MIN_DIAS + ' dias por militar, pela conta ' + Session.getEffectiveUser().getEmail() + '.');
 }
 
-/** Cancela o envio semanal automático. */
-function desinstalarEnvioSemanal() {
+/** Cancela o envio automático. */
+function desinstalarEnvioAutomatico() {
+  removerAgendamentos_();
+  Logger.log('Envio automático cancelado.');
+}
+
+function removerAgendamentos_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'enviarEmailsSemanais') ScriptApp.deleteTrigger(t);
+    var h = t.getHandlerFunction();
+    if (h === 'enviarEmailsAutomaticos' || h === 'enviarEmailsSemanais') ScriptApp.deleteTrigger(t);
   });
-  Logger.log('Envio semanal cancelado.');
 }
