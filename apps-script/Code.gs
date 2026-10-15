@@ -6,7 +6,9 @@
  *   ?action=ping                     → aquecimento / teste de disponibilidade
  *   ?action=check&envio=…            → confirma a gravação de um envio (id gerado pelo formulário)
  *   ?action=check&rg=…&marco=…       → legado (formulários antigos em cache): RG já respondeu o marco?
- *   ?action=data&token=…             → dados completos para o dashboard (EXIGE TOKEN)
+ *   ?action=data&token=…             → dados completos para o dashboard (EXIGE TOKEN):
+ *                                      respostas, datas oficiais, contatos e envios
+ *   ?action=envio&token=…&rg=…&marco=…&canal=…  → registra o envio do convite (EXIGE TOKEN)
  *   qualquer outra ação              → erro (fecha o vazamento do GET aberto)
  *
  * POST (JSON): grava uma resposta com carimbo de servidor. Não há bloqueio de respostas
@@ -25,10 +27,16 @@
  *    as colunas rg_cbmerj | data_inspecao (uma linha por RG; data em AAAA-MM-DD ou célula
  *    de data). A lista fica só na planilha — NUNCA no repositório público nem nos HTML.
  *    Para corrigir as respostas já gravadas, rode uma vez corrigirInspecoesExistentes().
+ * 6. Contatos dos militares (para o controle de envio do dashboard): aba CONTATOS_SHEET com o
+ *    cabeçalho RG | Nome | Posto/Graduação | Telefone_WhatsApp | Link_WhatsApp | E-mail | Observação.
+ *    Dados pessoais: ficam só na planilha e só saem pelo action=data, que exige o token.
+ *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
  */
 
 var SHEET_NAME = 'Respostas';
 var INSPECOES_SHEET = 'Inspecoes';
+var CONTATOS_SHEET = 'Contatos';
+var ENVIOS_SHEET = 'Envios';
 
 /* ---- Escore PROMIS Global Health: FONTE ÚNICA ----
  * Tabelas oficiais HealthMeasures (v1.2) de conversão do escore bruto (4-20) em T-score.
@@ -239,6 +247,23 @@ function cleanEnvio_(v) {
   return /^[\w-]{8,64}$/.test(s) ? s : '';
 }
 
+function tokenOk_(e) {
+  var expected = PropertiesService.getScriptProperties().getProperty('DASH_TOKEN');
+  var token = String((e && e.parameter && e.parameter.token) || '');
+  return Boolean(expected && token && token === expected);
+}
+
+/** Valores de uma aba auxiliar (vazio se a aba não existir). Datas viram texto ISO. */
+function abaValores_(nome) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nome);
+  if (!sh || sh.getLastRow() === 0) return [];
+  return sh.getDataRange().getValues().map(function (row) {
+    return row.map(function (v) {
+      return Object.prototype.toString.call(v) === '[object Date]' ? v.toISOString() : v;
+    });
+  });
+}
+
 function doGet(e) {
   var action = String((e && e.parameter && e.parameter.action) || '').toLowerCase();
 
@@ -272,12 +297,38 @@ function doGet(e) {
   }
 
   if (action === 'data') {
-    var expected = PropertiesService.getScriptProperties().getProperty('DASH_TOKEN');
-    var token = String(e.parameter.token || '');
-    if (!expected || !token || token !== expected) {
-      return output_(e, { error: 'unauthorized' });
+    if (!tokenOk_(e)) return output_(e, { error: 'unauthorized' });
+    var ref = inspecoesRef_();
+    return output_(e, {
+      ok: true,
+      values: sheet_().getDataRange().getValues(),
+      inspecoes: Object.keys(ref).map(function (rg) { return [rg, ref[rg]]; }),
+      contatos: abaValores_(CONTATOS_SHEET),
+      envios: abaValores_(ENVIOS_SHEET)
+    });
+  }
+
+  if (action === 'envio') {
+    // Registro do envio do convite pelo controle do dashboard (quem, qual marco, qual canal).
+    if (!tokenOk_(e)) return output_(e, { error: 'unauthorized' });
+    var rgEnvio = normRg_(e.parameter.rg);
+    var marcoEnvio = String(e.parameter.marco || '').slice(0, 40);
+    var canal = String(e.parameter.canal || '').toLowerCase();
+    if (!rgEnvio || !marcoEnvio || ['whatsapp', 'email'].indexOf(canal) < 0) {
+      return output_(e, { error: 'parametros_invalidos' });
     }
-    return output_(e, { ok: true, values: sheet_().getDataRange().getValues() });
+    var quando = new Date().toISOString();
+    var lockEnvio = LockService.getScriptLock();
+    lockEnvio.waitLock(20000);
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sh = ss.getSheetByName(ENVIOS_SHEET) || ss.insertSheet(ENVIOS_SHEET);
+      if (sh.getLastRow() === 0) sh.appendRow(['registrado_em', 'rg_cbmerj', 'marco', 'canal']);
+      sh.appendRow([quando, rgEnvio, marcoEnvio, canal]);
+    } finally {
+      lockEnvio.releaseLock();
+    }
+    return output_(e, { ok: true, registrado_em: quando });
   }
 
   // Nenhuma outra ação expõe dados: fecha o GET aberto apontado na análise (D1/C3).

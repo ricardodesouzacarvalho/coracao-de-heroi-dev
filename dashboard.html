@@ -78,6 +78,15 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 table{border-collapse:collapse;width:100%;font-size:.76rem}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
+.send-filters{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.send-summary{display:flex;flex-wrap:wrap;gap:8px 18px;margin:6px 0 10px;font-size:.8rem;color:var(--muted)}
+.send-summary strong{color:var(--text);font-size:1rem;margin-right:3px}
+.send-btn{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:4px 9px;margin:2px 4px 2px 0;font:600 .72rem inherit;text-decoration:none;color:var(--text);background:var(--surface);cursor:pointer;white-space:nowrap}
+.send-btn.wa{border-color:#25a35a;color:#1b7a43}.send-btn.mail{border-color:var(--blue);color:var(--blue)}
+.send-btn.sugerido{box-shadow:0 0 0 2px #f4c95d inset}
+.tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;white-space:nowrap}
+.tag.pendente{background:#fde8e8;color:#8a1c1c}.tag.enviado{background:#fff4d6;color:#7a5300}.tag.respondido{background:#e3f4ea;color:#1d6b3a}.tag.proximo{background:#e8eef7;color:#1d4f8a}
+.alerta{color:#8a1c1c;font-size:.7rem}
 .priority{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;color:#fff}
 .priority.high{background:var(--danger)}.priority.medium{background:var(--orange)}
 .auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px;text-align:center}
@@ -220,6 +229,24 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       </div>
       <p class="score-note" id="followupNote"></p>
     </section>
+    <section class="panel wide" id="sendPanel">
+      <h2>Controle de envio do formulário</h2>
+      <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega.</p>
+      <div class="send-summary" id="sendSummary"></div>
+      <div class="send-filters" id="sendFilters">
+        <button type="button" class="chip" data-send="pendente" aria-pressed="true">Pendentes</button>
+        <button type="button" class="chip" data-send="enviado" aria-pressed="false">Enviados, sem resposta</button>
+        <button type="button" class="chip" data-send="respondido" aria-pressed="false">Respondidos</button>
+        <button type="button" class="chip" data-send="proximo" aria-pressed="false">Janela abre em até 14 dias</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Militar</th><th>Marco · prazo</th><th>Situação</th><th>Enviar</th><th>Observações</th></tr></thead>
+          <tbody id="sendRows"></tbody>
+        </table>
+      </div>
+      <p class="score-note" id="sendNote"></p>
+    </section>
     <section class="panel wide" id="auditPanel">
       <h2>Auditoria · RGs fora do programa</h2>
       <p class="panel-sub">Respostas com RG que não consta da lista de Inspeções do programa (provável erro de digitação ou participante não incluído). Ficam fora de todas as análises deste painel até a divergência ser resolvida. Identificadores mascarados: confira na base restrita pela data e hora de registro.</p>
@@ -247,6 +274,10 @@ const ACTIVE=new Set(MARKERS.map(function(m){return m.key;}));
 const TOKEN_KEY='dash_promis_chave';
 let DATA=[];
 let AUDIT=[];
+/* Controle de envio: datas oficiais (RG → AAAA-MM-DD), contatos (RG → objeto) e envios
+   registrados. Vêm do action=data (protegido por token); nunca ficam no repositório. */
+let CTRL={inspecoes:{},contatos:{},envios:[]};
+let SEND_FILTER='pendente';
 let DEMO=false;
 
 /* Escores PROMIS (bruto, recodificação da dor e T-score) são calculados exclusivamente
@@ -425,6 +456,7 @@ function hideGate(){
 }
 function enterDemo(note){
   DATA=splitAudit(generateDemo());DEMO=true;
+  CTRL=demoCtrl();
   setSource('Demonstração · '+(DATA.length+AUDIT.length)+' respostas',true);
   document.getElementById('statusMsg').textContent=note||'';
   hideGate();render();
@@ -448,6 +480,7 @@ async function tryLoad(token){
     const compatibleRows=rowsFromSheet(raw.values).filter(compatible);
     if(!compatibleRows.length){enterDemo('Fonte conectada, ainda sem respostas compatíveis; exibindo simulação.');return;}
     DATA=splitAudit(compatibleRows.map(prepare));DEMO=false;
+    CTRL=buildCtrl(raw);
     setSource('Dados conectados',false);
     document.getElementById('statusMsg').textContent=compatibleRows.length+' respostas carregadas'+(AUDIT.length?' · '+AUDIT.length+' em auditoria (RG fora do programa)':'')+' · '+new Date().toLocaleString('pt-BR');
     hideGate();render();
@@ -514,6 +547,7 @@ function render(){
   /* triagem assistencial inclui respostas repetidas: um sinal novo não pode ficar oculto */
   renderFollowup(DATA.filter(function(r){return ACTIVE.has(r.marker);}));
   renderAudit();
+  renderEnvios();
 }
 
 function renderKpis(rows){
@@ -1326,6 +1360,129 @@ function followupSignals(r){
   if(r.tabaco_status==='Fumante atual'&&['Não houve oferta de tratamento','Tive interesse, mas não iniciei'].includes(r.tabaco_conduta)){signals.push('cessação do tabagismo');score+=1;}
   return {signals:signals,score:score};
 }
+/* ---- Controle de envio do formulário ---- */
+const SEND_WINDOWS=[{key:'Inicial',ini:0,fim:60},{key:'90 dias',ini:61,fim:130},{key:'180 dias',ini:140,fim:220},{key:'270 dias',ini:230,fim:310}];
+const POSTOS={'SD':'Sd','CB':'Cb','3 SGT':'3º Sgt','2 SGT':'2º Sgt','1 SGT':'1º Sgt','SUBTEN':'Subten','2 TEN':'2º Ten','1 TEN':'1º Ten','CAP':'Cap','MAJ':'Maj','TEN CEL':'Ten Cel','CEL':'Cel'};
+function rgKey(v){return String(v==null?'':v).replace(/\D/g,'');}
+function buildCtrl(raw){
+  const ctrl={inspecoes:{},contatos:{},envios:[]};
+  (raw.inspecoes||[]).forEach(function(p){const rg=rgKey(p[0]);const d=String(p[1]||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))ctrl.inspecoes[rg]=d;});
+  rowsFromSheet(raw.contatos||[]).forEach(function(c){const rg=rgKey(c.RG);if(rg)ctrl.contatos[rg]=c;});
+  ctrl.envios=rowsFromSheet(raw.envios||[]).map(function(e){return {rg:rgKey(e.rg_cbmerj),marco:String(e.marco||''),canal:String(e.canal||''),quando:String(e.registrado_em||'')};});
+  return ctrl;
+}
+function demoCtrl(){
+  /* Militares fictícios em várias situações, só para a demonstração. */
+  const ctrl={inspecoes:{},contatos:{},envios:[]};
+  const hoje=new Date();hoje.setHours(0,0,0,0);
+  [5,20,58,70,100,125,135,150,200,215,232,290,305,50,226].forEach(function(dias,i){
+    const rg='9'+String(i+1).padStart(4,'0');const d=new Date(hoje.getTime()-dias*86400000);
+    ctrl.inspecoes[rg]=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    ctrl.contatos[rg]={RG:rg,Nome:'MILITAR EXEMPLO '+(i+1),'Posto/Graduação':['SUBTEN','2 SGT','CB','CAP'][i%4],Telefone_WhatsApp:'+55219000000'+String(i).padStart(2,'0'),'E-mail':i%3?'exemplo'+(i+1)+'@exemplo.com':'',Observação:''};
+  });
+  ctrl.envios=[{rg:'90004',marco:'90 dias',canal:'whatsapp',quando:new Date().toISOString()}];
+  return ctrl;
+}
+function ymdToDate(ymd){const p=ymd.split('-');return new Date(+p[0],p[1]-1,+p[2]);}
+function fmtData(d){return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();}
+function nomeProprio(nome){
+  const minus=['de','da','do','das','dos','e'];
+  return String(nome||'').toLowerCase().split(/\s+/).filter(Boolean).map(function(w,i){return i&&minus.indexOf(w)>=0?w:w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');
+}
+function tratamento(c){
+  const posto=POSTOS[String(c['Posto/Graduação']||'').trim().toUpperCase()]||'';
+  const partes=nomeProprio(c.Nome).split(' ');
+  const curto=partes.length>2?partes[0]+' '+partes[partes.length-1]:partes.join(' ');
+  return (posto?posto+' ':'')+curto;
+}
+function mensagemConvite(c,item){
+  const form=new URL('index.html',location.href).href;
+  return 'Olá, '+tratamento(c)+'! Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
+    +'Está aberto o seu questionário de acompanhamento do marco '+item.marco+'. Leva cerca de 10 minutos e pode ser respondido até '+fmtData(item.fimData)+'.\n\n'
+    +'Ao preencher, informe a data da sua Inspeção de Saúde: '+fmtData(item.inspecaoData)+'.\n\n'
+    +'Link: '+form+'\n\nObrigado pela participação!';
+}
+function listaEnvios(){
+  const hoje=new Date();hoje.setHours(0,0,0,0);
+  const emails={};
+  Object.keys(CTRL.contatos).forEach(function(rg){const e=String(CTRL.contatos[rg]['E-mail']||'').trim().toLowerCase();if(e)(emails[e]=emails[e]||[]).push(rg);});
+  const itens=[];
+  Object.keys(CTRL.inspecoes).forEach(function(rg){
+    const inspecaoData=ymdToDate(CTRL.inspecoes[rg]);
+    const dias=Math.round((hoje-inspecaoData)/86400000);
+    let w=SEND_WINDOWS.filter(function(x){return dias>=x.ini&&dias<=x.fim;})[0],situacao;
+    if(!w){
+      const prox=SEND_WINDOWS.filter(function(x){return x.ini>dias;})[0];
+      if(!prox||prox.ini-dias>14)return;
+      w=prox;situacao='proximo';
+    }
+    const respondida=DATA.filter(function(r){return rgKey(r.rg_cbmerj)===rg&&r.marker===w.key;})[0];
+    const envios=CTRL.envios.filter(function(e){return e.rg===rg&&e.marco===w.key;});
+    const ultimo=envios[envios.length-1];
+    if(!situacao)situacao=respondida?'respondido':ultimo?'enviado':'pendente';
+    const c=CTRL.contatos[rg]||null;
+    const email=c?String(c['E-mail']||'').trim():'';
+    const alertas=[];
+    if(!c)alertas.push('sem contato cadastrado');
+    else{
+      if(email&&emails[email.toLowerCase()].length>1)alertas.push('e-mail repetido em outro militar: conferir antes de usar');
+      if(String(c['Observação']||'').trim())alertas.push(String(c['Observação']).trim());
+      if(!String(c['Posto/Graduação']||'').trim())alertas.push('sem posto/graduação');
+    }
+    itens.push({rg:rg,c:c,email:email,emailOk:Boolean(email)&&emails[email.toLowerCase()].length===1,marco:w.key,dias:dias,
+      inspecaoData:inspecaoData,inicioData:new Date(inspecaoData.getTime()+w.ini*86400000),fimData:new Date(inspecaoData.getTime()+w.fim*86400000),
+      restam:w.fim-dias,situacao:situacao,respondida:respondida,ultimo:ultimo,nEnvios:envios.length,alertas:alertas});
+  });
+  return itens.sort(function(a,b){return a.restam-b.restam;});
+}
+function registrarEnvio(rg,marco,canal){
+  const item={rg:rg,marco:marco,canal:canal,quando:new Date().toISOString()};
+  CTRL.envios.push(item);renderEnvios();
+  if(DEMO)return;
+  const token=sessionStorage.getItem(TOKEN_KEY);
+  jsonp(SCRIPT_URL,{action:'envio',token:token,rg:rg,marco:marco,canal:canal}).then(function(r){
+    if(!r||!r.ok){CTRL.envios.splice(CTRL.envios.indexOf(item),1);renderEnvios();alert('Não foi possível registrar o envio na planilha. Tente novamente.');}
+  }).catch(function(){CTRL.envios.splice(CTRL.envios.indexOf(item),1);renderEnvios();alert('Sem conexão com a planilha: o envio não foi registrado.');});
+}
+function renderEnvios(){
+  const itens=listaEnvios();
+  const cont={pendente:0,enviado:0,respondido:0,proximo:0};
+  itens.forEach(function(i){cont[i.situacao]++;});
+  document.getElementById('sendSummary').innerHTML=
+    '<span><strong>'+cont.pendente+'</strong>pendentes</span><span><strong>'+cont.enviado+'</strong>enviados, sem resposta</span><span><strong>'+cont.respondido+'</strong>respondidos na janela</span><span><strong>'+cont.proximo+'</strong>com janela abrindo em até 14 dias</span>';
+  document.querySelectorAll('#sendFilters .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.send===SEND_FILTER));});
+  const lista=itens.filter(function(i){return i.situacao===SEND_FILTER;});
+  const rotulo={pendente:'Pendente',enviado:'Enviado',respondido:'Respondido',proximo:'Abre em breve'};
+  document.getElementById('sendRows').innerHTML=lista.length?lista.map(function(i){
+    const nome=i.c?esc(tratamento(i.c)):'—';
+    const prazo=i.situacao==='proximo'?'abre em '+fmtData(i.inicioData):'até '+fmtData(i.fimData)+' · '+(i.restam===0?'último dia':'faltam '+i.restam+' dia(s)');
+    let sit='<span class="tag '+i.situacao+'">'+rotulo[i.situacao]+'</span>';
+    if(i.situacao==='respondido'){const t=Date.parse(i.respondida.registrado_em_servidor||i.respondida.carimbo_iso||'');if(Number.isFinite(t))sit+='<br><small>'+fmtData(new Date(t))+'</small>';}
+    else if(i.ultimo){sit+='<br><small>'+(i.situacao==='enviado'?'':'último envio ')+fmtData(new Date(i.ultimo.quando))+' · '+(i.ultimo.canal==='email'?'e-mail':'WhatsApp')+(i.nEnvios>1?' ('+i.nEnvios+'x)':'')+'</small>';}
+    let btn='—';
+    if(i.c&&i.situacao!=='respondido'){
+      const msg=mensagemConvite(i.c,i);
+      const tel=String(i.c.Telefone_WhatsApp||'').replace(/\D/g,'');
+      const sugereEmail=i.emailOk;
+      btn='';
+      if(tel)btn+='<a class="send-btn wa'+(sugereEmail?'':' sugerido')+'" target="_blank" rel="noopener" data-rg="'+i.rg+'" data-marco="'+esc(i.marco)+'" data-canal="whatsapp" href="https://wa.me/'+tel+'?text='+encodeURIComponent(msg)+'">WhatsApp</a>';
+      if(i.email)btn+='<a class="send-btn mail'+(sugereEmail?' sugerido':'')+'" data-rg="'+i.rg+'" data-marco="'+esc(i.marco)+'" data-canal="email" href="mailto:'+encodeURIComponent(i.email)+'?subject='+encodeURIComponent('Programa Coração de Herói — questionário do marco '+i.marco)+'&body='+encodeURIComponent(msg)+'">E-mail</a>';
+      if(i.situacao==='proximo')btn='<small>disponível a partir de '+fmtData(i.inicioData)+'</small>';
+    }
+    return '<tr><td>'+nome+'<br><small>RG '+esc(i.rg)+'</small></td><td>'+esc(i.marco)+'<br><small>'+prazo+'</small></td><td>'+sit+'</td><td>'+btn+'</td><td>'+(i.alertas.length?'<span class="alerta">'+i.alertas.map(esc).join('<br>')+'</span>':'')+'</td></tr>';
+  }).join(''):'<tr><td colspan="5" class="empty">Nenhum militar nesta situação.</td></tr>';
+  const semData=Object.keys(CTRL.inspecoes).length===0;
+  document.getElementById('sendNote').textContent=semData
+    ?'Sem datas oficiais de Inspeção carregadas: implante o Code.gs atualizado e crie as abas Inspecoes e Contatos na planilha.'
+    :'Canal sugerido (contorno amarelo): e-mail quando houver e-mail válido e exclusivo; senão, WhatsApp. O registro do envio é gravado na aba Envios da planilha ao clicar no botão.';
+}
+document.addEventListener('click',function(ev){
+  const a=ev.target.closest&&ev.target.closest('a.send-btn');
+  if(a)registrarEnvio(a.dataset.rg,a.dataset.marco,a.dataset.canal);
+  const f=ev.target.closest&&ev.target.closest('#sendFilters .chip');
+  if(f){SEND_FILTER=f.dataset.send;renderEnvios();}
+});
+
 function renderAudit(){
   const rows=AUDIT.slice().sort(function(a,b){return String(b.registrado_em_servidor||b.carimbo_iso||'').localeCompare(String(a.registrado_em_servidor||a.carimbo_iso||''));});
   const fmtWhen=function(r){const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'');return Number.isFinite(t)?new Date(t).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):esc(r.carimbo_data_hora||'—');};
@@ -1349,7 +1506,7 @@ function renderFollowup(rows){
   note.textContent=all.length>list.length?'Mostrando os '+list.length+' casos de maior prioridade de um total de '+all.length+' com sinais no filtro atual.':'Total: '+all.length+' caso(s) com sinais no filtro atual.';
 }
 
-document.querySelectorAll('.chip').forEach(function(button){
+document.querySelectorAll('#markerFilters .chip').forEach(function(button){
   button.addEventListener('click',function(){
     const key=button.dataset.marker,active=button.getAttribute('aria-pressed')==='true';
     if(active&&ACTIVE.size===1)return;

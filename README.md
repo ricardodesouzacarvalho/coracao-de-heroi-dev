@@ -59,6 +59,14 @@ RG fora da aba `Inspecoes` é tratado como erro: a resposta é gravada com `rg_n
 o formulário avisa o participante (após o envio) e pede contato pelo WhatsApp (21) 99278-9615, e o
 dashboard exclui a resposta das análises e a lista em **Auditoria · RGs fora do programa**.
 
+### Controle de envio do formulário
+
+Seção do dashboard com os militares na janela de resposta (aba `Inspecoes`) e os que entram
+nela em até 14 dias, com mensagem individualizada aberta no WhatsApp ou no e-mail, registro do
+envio na aba `Envios` (`action=envio`, exige token) e baixa automática quando a resposta chega.
+Requer a aba `Contatos` na planilha do piloto. Contatos são dados pessoais: ficam **somente** na
+planilha, nunca neste repositório.
+
 ### Respostas repetidas
 
 Não há bloqueio: o mesmo RG pode responder mais de uma vez o mesmo marco. Nas estatísticas do
