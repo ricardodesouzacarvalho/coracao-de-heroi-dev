@@ -85,7 +85,7 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .send-btn.wa{border-color:#25a35a;color:#1b7a43}.send-btn.mail{border-color:var(--blue);color:var(--blue)}
 .send-btn.sugerido{box-shadow:0 0 0 2px #f4c95d inset}
 .tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;white-space:nowrap}
-.tag.pendente{background:#fde8e8;color:#8a1c1c}.tag.enviado{background:#fff4d6;color:#7a5300}.tag.respondido{background:#e3f4ea;color:#1d6b3a}.tag.proximo{background:#e8eef7;color:#1d4f8a}
+.tag.pendente{background:#fde8e8;color:#8a1c1c}.tag.enviado{background:#fff4d6;color:#7a5300}.tag.respondido{background:#e3f4ea;color:#1d6b3a}.tag.proximo{background:#e8eef7;color:#1d4f8a}.tag.suspenso{background:#ececf1;color:#4a4a55}
 .alerta{color:#8a1c1c;font-size:.7rem}
 .priority{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;color:#fff}
 .priority.high{background:var(--danger)}.priority.medium{background:var(--orange)}
@@ -231,13 +231,14 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
     </section>
     <section class="panel wide" id="sendPanel">
       <h2>Controle de envio do formulário</h2>
-      <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega.</p>
+      <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega. Pela coluna Observação da aba Contatos: <strong>Desistência</strong> suspende o envio; <strong>Deixou de responder</strong> mantém o envio com mensagem de resgate.</p>
       <div class="send-summary" id="sendSummary"></div>
       <div class="send-filters" id="sendFilters">
         <button type="button" class="chip" data-send="pendente" aria-pressed="true">Pendentes</button>
         <button type="button" class="chip" data-send="enviado" aria-pressed="false">Enviados, sem resposta</button>
         <button type="button" class="chip" data-send="respondido" aria-pressed="false">Respondidos</button>
         <button type="button" class="chip" data-send="proximo" aria-pressed="false">Janela abre em até 14 dias</button>
+        <button type="button" class="chip" data-send="suspenso" aria-pressed="false">Suspensos (desistência)</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -1378,7 +1379,7 @@ function demoCtrl(){
   [5,20,58,70,100,125,135,150,200,215,232,290,305,50,226].forEach(function(dias,i){
     const rg='9'+String(i+1).padStart(4,'0');const d=new Date(hoje.getTime()-dias*86400000);
     ctrl.inspecoes[rg]=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    ctrl.contatos[rg]={RG:rg,Nome:'MILITAR EXEMPLO '+(i+1),'Posto/Graduação':['SUBTEN','2 SGT','CB','CAP'][i%4],Telefone_WhatsApp:'+55219000000'+String(i).padStart(2,'0'),'E-mail':i%3?'exemplo'+(i+1)+'@exemplo.com':'',Observação:''};
+    ctrl.contatos[rg]={RG:rg,Nome:'MILITAR EXEMPLO '+(i+1),'Posto/Graduação':['SUBTEN','2 SGT','CB','CAP'][i%4],Telefone_WhatsApp:'+55219000000'+String(i).padStart(2,'0'),'E-mail':i%3?'exemplo'+(i+1)+'@exemplo.com':'',Observação:i===4?'Desistência':i===6?'Deixou de responder':''};
   });
   ctrl.envios=[{rg:'90004',marco:'90 dias',canal:'whatsapp',quando:new Date().toISOString()}];
   return ctrl;
@@ -1395,14 +1396,26 @@ function tratamento(c){
   const curto=partes.length>2?partes[0]+' '+partes[partes.length-1]:partes.join(' ');
   return (posto?posto+' ':'')+curto;
 }
+function situacaoContato(c){
+  /* Observação "Desistência" suspende todo envio; "Deixou de responder" mantém o envio com mensagem de resgate. */
+  const o=String((c&&c['Observação'])||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return o.indexOf('desist')===0?'suspenso':o.indexOf('deixou')===0?'resgate':'';
+}
 function mensagemConvite(c,item){
   const form=new URL('index.html',location.href).href;
-  return 'Olá, '+tratamento(c)+'! Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
-    +'Está aberto o seu questionário de acompanhamento do marco '+item.marco+'.\n\n'
+  const marco=item.marco==='Inicial'?'inicial':item.marco;
+  /* Primeira mensagem do marco: "está aberto"; "mais uma vez" só depois de envio registrado para o mesmo marco. */
+  const reenvio=(item.nEnvios>0?'Estamos enviando mais uma vez':'Está aberto')+' o formulário de acompanhamento do marco '+marco+' do programa.';
+  const resgate=item.resgate;
+  return 'Olá, '+tratamento(c)+'!\n\n'
+    +'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
+    +(resgate?'Sentimos a sua falta! Notamos que você deixou de responder ao acompanhamento e queremos muito continuar cuidando de você.\n\n':'')
+    +reenvio+'\n\n'
     +'Sua resposta é muito importante: é com ela que acompanhamos a evolução da sua saúde ao longo do programa e melhoramos o cuidado oferecido a você e aos demais bombeiros. Cada resposta conta.\n\n'
-    +'Leva cerca de 10 minutos e pode ser respondido até '+fmtData(item.fimData)+'.\n\n'
-    +'Ao preencher, informe a data da sua Inspeção de Saúde: '+fmtData(item.inspecaoData)+'.\n\n'
-    +'Link: '+form+'\n\nObrigado pela participação!';
+    +'Leva cerca de 7 minutos e o ideal é ser respondido o quanto antes.'+(resgate?' Se houve alguma dificuldade para responder, é só nos contar.':'')+'\n\n'
+    +'Basta clicar no link abaixo:\n\n'
+    +'Link: '+form+'\n\nObrigado pela participação!\nPrograma Coração de Herói\n\n'
+    +'Se já respondeu, desconsidere esta mensagem. Para não receber mais estas mensagens, é só nos avisar.';
 }
 function listaEnvios(){
   const hoje=new Date();hoje.setHours(0,0,0,0);
@@ -1421,19 +1434,21 @@ function listaEnvios(){
     const respondida=DATA.filter(function(r){return rgKey(r.rg_cbmerj)===rg&&r.marker===w.key;})[0];
     const envios=CTRL.envios.filter(function(e){return e.rg===rg&&e.marco===w.key;});
     const ultimo=envios[envios.length-1];
-    if(!situacao)situacao=respondida?'respondido':ultimo?'enviado':'pendente';
     const c=CTRL.contatos[rg]||null;
+    const sitContato=situacaoContato(c);
+    if(sitContato==='suspenso'&&!respondida)situacao='suspenso';
+    if(!situacao)situacao=respondida?'respondido':ultimo?'enviado':'pendente';
     const email=c?String(c['E-mail']||'').trim():'';
     const alertas=[];
     if(!c)alertas.push('sem contato cadastrado');
     else{
       if(email&&emails[email.toLowerCase()].length>1)alertas.push('e-mail repetido em outro militar: conferir antes de usar');
-      if(String(c['Observação']||'').trim())alertas.push(String(c['Observação']).trim());
+      if(String(c['Observação']||'').trim())alertas.push(String(c['Observação']).trim()+(sitContato==='suspenso'?' — envio suspenso':sitContato==='resgate'?' — mensagem de resgate':''));
       if(!String(c['Posto/Graduação']||'').trim())alertas.push('sem posto/graduação');
     }
     itens.push({rg:rg,c:c,email:email,emailOk:Boolean(email)&&emails[email.toLowerCase()].length===1,marco:w.key,dias:dias,
       inspecaoData:inspecaoData,inicioData:new Date(inspecaoData.getTime()+w.ini*86400000),fimData:new Date(inspecaoData.getTime()+w.fim*86400000),
-      restam:w.fim-dias,situacao:situacao,respondida:respondida,ultimo:ultimo,nEnvios:envios.length,alertas:alertas});
+      restam:w.fim-dias,situacao:situacao,resgate:sitContato==='resgate',respondida:respondida,ultimo:ultimo,nEnvios:envios.length,alertas:alertas});
   });
   return itens.sort(function(a,b){return a.restam-b.restam;});
 }
@@ -1448,21 +1463,21 @@ function registrarEnvio(rg,marco,canal){
 }
 function renderEnvios(){
   const itens=listaEnvios();
-  const cont={pendente:0,enviado:0,respondido:0,proximo:0};
+  const cont={pendente:0,enviado:0,respondido:0,proximo:0,suspenso:0};
   itens.forEach(function(i){cont[i.situacao]++;});
   document.getElementById('sendSummary').innerHTML=
-    '<span><strong>'+cont.pendente+'</strong>pendentes</span><span><strong>'+cont.enviado+'</strong>enviados, sem resposta</span><span><strong>'+cont.respondido+'</strong>respondidos na janela</span><span><strong>'+cont.proximo+'</strong>com janela abrindo em até 14 dias</span>';
+    '<span><strong>'+cont.pendente+'</strong>pendentes</span><span><strong>'+cont.enviado+'</strong>enviados, sem resposta</span><span><strong>'+cont.respondido+'</strong>respondidos na janela</span><span><strong>'+cont.proximo+'</strong>com janela abrindo em até 14 dias</span><span><strong>'+cont.suspenso+'</strong>suspensos (desistência)</span>';
   document.querySelectorAll('#sendFilters .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.send===SEND_FILTER));});
   const lista=itens.filter(function(i){return i.situacao===SEND_FILTER;});
-  const rotulo={pendente:'Pendente',enviado:'Enviado',respondido:'Respondido',proximo:'Abre em breve'};
+  const rotulo={pendente:'Pendente',enviado:'Enviado',respondido:'Respondido',proximo:'Abre em breve',suspenso:'Suspenso'};
   document.getElementById('sendRows').innerHTML=lista.length?lista.map(function(i){
     const nome=i.c?esc(tratamento(i.c)):'—';
-    const prazo=i.situacao==='proximo'?'abre em '+fmtData(i.inicioData):'até '+fmtData(i.fimData)+' · '+(i.restam===0?'último dia':'faltam '+i.restam+' dia(s)');
+    const prazo=i.situacao==='suspenso'?'envio suspenso':i.situacao==='proximo'?'abre em '+fmtData(i.inicioData):'até '+fmtData(i.fimData)+' · '+(i.restam===0?'último dia':'faltam '+i.restam+' dia(s)');
     let sit='<span class="tag '+i.situacao+'">'+rotulo[i.situacao]+'</span>';
     if(i.situacao==='respondido'){const t=Date.parse(i.respondida.registrado_em_servidor||i.respondida.carimbo_iso||'');if(Number.isFinite(t))sit+='<br><small>'+fmtData(new Date(t))+'</small>';}
     else if(i.ultimo){sit+='<br><small>'+(i.situacao==='enviado'?'':'último envio ')+fmtData(new Date(i.ultimo.quando))+' · '+({email:'e-mail','email-auto':'e-mail automático',whatsapp:'WhatsApp'}[i.ultimo.canal]||i.ultimo.canal)+(i.nEnvios>1?' ('+i.nEnvios+'x)':'')+'</small>';}
     let btn='—';
-    if(i.c&&i.situacao!=='respondido'){
+    if(i.c&&i.situacao!=='respondido'&&i.situacao!=='suspenso'){
       const msg=mensagemConvite(i.c,i);
       const tel=String(i.c.Telefone_WhatsApp||'').replace(/\D/g,'');
       const sugereEmail=i.emailOk;
