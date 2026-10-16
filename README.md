@@ -71,6 +71,8 @@ Coluna `Observação` da aba `Contatos`: `Desistência` **suspende** o envio por
 militar fica só no filtro "Suspensos"); `Deixou de responder` mantém o envio com mensagem de
 **resgate**; vazio ou outro texto segue a regra normal. A mensagem não traz prazo nem data da
 Inspeção (cerca de 7 minutos, "o quanto antes").
+Primeira mensagem do marco: "Está aberto o formulário…"; depois de envio registrado para o mesmo
+marco: "Estamos enviando mais uma vez…".
 
 O `Code.gs` também traz o **e-mail automático** (convite + até 2 lembretes por marco, intervalo
 de 3 dias, execução diária às 8h; ver README da produção). No piloto, antes de ativar com

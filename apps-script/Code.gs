@@ -572,7 +572,10 @@ function selecionarEmailsAutomaticos_() {
 function mensagemEmail_(item) {
   var form = PropertiesService.getScriptProperties().getProperty('FORM_URL') || FORM_URL_PADRAO;
   var marco = item.marco === 'Inicial' ? 'inicial' : item.marco;
-  var reenvio = 'Estamos enviando mais uma vez o formulário de acompanhamento do marco ' + marco + ' do programa.';
+  /* Primeira mensagem do marco: "está aberto"; "mais uma vez" só depois de envio registrado para o mesmo marco. */
+  var reenvio = item.tipo === 'convite'
+    ? 'Está aberto o formulário de acompanhamento do marco ' + marco + ' do programa.'
+    : 'Estamos enviando mais uma vez o formulário de acompanhamento do marco ' + marco + ' do programa.';
   var abertura = item.resgate
     ? 'Sentimos a sua falta! Notamos que você deixou de responder ao acompanhamento e queremos muito continuar cuidando de você.\n\n' + reenvio
     : reenvio;

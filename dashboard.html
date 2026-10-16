@@ -1404,7 +1404,8 @@ function situacaoContato(c){
 function mensagemConvite(c,item){
   const form=new URL('index.html',location.href).href;
   const marco=item.marco==='Inicial'?'inicial':item.marco;
-  const reenvio='Estamos enviando mais uma vez o formulário de acompanhamento do marco '+marco+' do programa.';
+  /* Primeira mensagem do marco: "está aberto"; "mais uma vez" só depois de envio registrado para o mesmo marco. */
+  const reenvio=(item.nEnvios>0?'Estamos enviando mais uma vez':'Está aberto')+' o formulário de acompanhamento do marco '+marco+' do programa.';
   const resgate=item.resgate;
   return 'Olá, '+tratamento(c)+'!\n\n'
     +'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
