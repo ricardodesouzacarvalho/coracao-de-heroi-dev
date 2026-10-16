@@ -34,7 +34,8 @@
  *    "Deixou de responder" mantém os envios, com mensagem de resgate; vazio = regra normal.
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
  * 7. E-mail automático a cada 3 dias (opcional): rode uma vez instalarEnvioAutomatico() pela
- *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(). Na
+ *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(); para ver
+ *    de qual endereço o e-mail sai, rode testeRemetente() (envia um teste só para você). Na
  *    planilha do piloto, crie a propriedade do script FORM_URL com o link do formulário do piloto.
  */
 
@@ -611,23 +612,42 @@ function previaEmailsAutomaticos() {
   return sel;
 }
 
+/** Define de onde o e-mail sai: conta do programa, apelido "Enviar e-mail como" verificado ou conta atual
+ *  (com o nome do programa e respostas para o e-mail do programa). */
+function remetente_() {
+  var opcoes = { name: NOME_REMETENTE, replyTo: EMAIL_PROGRAMA };
+  var conta = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  var modo;
+  if (conta === EMAIL_PROGRAMA) {
+    modo = 'conta do programa';
+  } else if (GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); }).indexOf(EMAIL_PROGRAMA) >= 0) {
+    opcoes.from = EMAIL_PROGRAMA;
+    modo = 'apelido "Enviar e-mail como" do programa';
+  } else {
+    modo = 'conta ' + conta + ' com nome do programa (respostas para ' + EMAIL_PROGRAMA + ')';
+  }
+  return { opcoes: opcoes, modo: modo, conta: conta };
+}
+
+/** Teste do remetente: envia UM e-mail de teste só para a conta que executa, pelo mesmo caminho do
+ *  envio automático, e registra no log o modo usado. Não usa a lista de militares nem grava em Envios. */
+function testeRemetente() {
+  var rem = remetente_();
+  Logger.log('Contas de envio (Enviar e-mail como): ' + JSON.stringify(GmailApp.getAliases()));
+  Logger.log('Modo de envio: ' + rem.modo);
+  var msg = mensagemEmail_({ tipo: 'convite', marco: '90 dias', inspecao: '2026-08-01', prazo: '2026-12-09',
+    contato: { Nome: 'TESTE DO REMETENTE', 'Posto/Graduação': '' } });
+  GmailApp.sendEmail(rem.conta, '[TESTE] ' + msg.assunto, msg.corpo, rem.opcoes);
+  Logger.log('E-mail de teste enviado para ' + rem.conta + '. Abra-o no Gmail e confira o campo "De".');
+}
+
 /** Envio diário: convite para quem entrou na janela e lembretes (a cada 3 dias) para quem não respondeu. */
 function enviarEmailsAutomaticos() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var sel = selecionarEmailsAutomaticos_();
-    var opcoes = { name: NOME_REMETENTE, replyTo: EMAIL_PROGRAMA };
-    var conta = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
-    var modo;
-    if (conta === EMAIL_PROGRAMA) {
-      modo = 'conta do programa';
-    } else if (GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); }).indexOf(EMAIL_PROGRAMA) >= 0) {
-      opcoes.from = EMAIL_PROGRAMA;
-      modo = 'apelido "Enviar e-mail como" do programa';
-    } else {
-      modo = 'conta ' + conta + ' com nome do programa (respostas para ' + EMAIL_PROGRAMA + ')';
-    }
+    var rem = remetente_(), opcoes = rem.opcoes, modo = rem.modo;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var envios = ss.getSheetByName(ENVIOS_SHEET) || ss.insertSheet(ENVIOS_SHEET);
     if (envios.getLastRow() === 0) envios.appendRow(['registrado_em', 'rg_cbmerj', 'marco', 'canal']);
