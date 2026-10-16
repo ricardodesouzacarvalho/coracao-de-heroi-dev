@@ -89,6 +89,11 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .alerta{color:#8a1c1c;font-size:.7rem}
 .priority{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;color:#fff}
 .priority.high{background:var(--danger)}.priority.medium{background:var(--orange)}
+.follow-filters{display:flex;flex-wrap:wrap;gap:10px 14px;margin:6px 0 12px}
+.follow-filters label{display:flex;flex-direction:column;gap:3px;font-size:.68rem;font-weight:700;color:#5b636b;text-transform:uppercase;letter-spacing:.03em}
+.follow-filters select{font:inherit;font-size:.78rem;font-weight:400;text-transform:none;letter-spacing:0;color:#1f2933;border:1px solid #c9ced4;border-radius:8px;padding:5px 8px;background:#fff;min-width:130px}
+#msgPreview{position:fixed;z-index:60;display:none;max-width:440px;max-height:70vh;overflow:auto;white-space:pre-wrap;background:#fff;color:#1f2933;border:1px solid #c9ced4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;font-size:.74rem;line-height:1.45;pointer-events:none}
+#msgPreview strong{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:#7a1f1f;margin-bottom:6px}
 .status-sel{font:inherit;font-size:.72rem;border-radius:8px;padding:3px 6px;border:1px solid #c9ced4;background:#fff}
 .status-sel.nao{border-color:#e3a3a3;background:#fdf0f0}.status-sel.parcial{border-color:#e6c46e;background:#fff8e6}.status-sel.ok{border-color:#8fc9a5;background:#eaf6ef}
 .auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px;text-align:center}
@@ -224,12 +229,20 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <h2>Sinais para acompanhamento assistencial</h2>
       <p class="panel-sub">Triagem gerencial, não diagnóstica. O nome vem da aba Contatos (acesso restrito pela chave). A mensagem abre o WhatsApp ou o e-mail já preenchidos, com abertura empática e perguntas sobre cada problema; a situação do caso fica gravada na aba Acompanhamento da planilha.</p>
       <div class="send-summary" id="followupSummary"></div>
-      <div class="send-filters" id="followupFilters">
-        <button type="button" class="chip" data-follow="aberto" aria-pressed="true">Em aberto</button>
-        <button type="button" class="chip" data-follow="Não resolvido" aria-pressed="false">Não resolvidos</button>
-        <button type="button" class="chip" data-follow="Parcialmente resolvido" aria-pressed="false">Resolvidos parcialmente</button>
-        <button type="button" class="chip" data-follow="Resolvido" aria-pressed="false">Resolvidos</button>
-        <button type="button" class="chip" data-follow="todos" aria-pressed="false">Todos</button>
+      <div class="follow-filters" id="followupFilters">
+        <label>Situação<select data-fkey="situacao">
+          <option value="aberto" selected>Em aberto</option><option value="Não resolvido">Não resolvidos</option>
+          <option value="Parcialmente resolvido">Resolvidos parcialmente</option><option value="Resolvido">Resolvidos</option><option value="todos">Todas</option>
+        </select></label>
+        <label>Prioridade<select data-fkey="prioridade">
+          <option value="todas" selected>Todas</option><option value="alta">Alta</option><option value="moderada">Moderada</option>
+        </select></label>
+        <label>Marco<select data-fkey="marco">
+          <option value="todos" selected>Todos</option><option>Inicial</option><option>90 dias</option><option>180 dias</option><option>270 dias</option><option>Fora dos marcos</option>
+        </select></label>
+        <label>Mostrar<select data-fkey="n">
+          <option>10</option><option selected>25</option><option>50</option><option>100</option>
+        </select></label>
       </div>
       <div class="table-wrap">
         <table>
@@ -289,7 +302,7 @@ let AUDIT=[];
    registrados. Vêm do action=data (protegido por token); nunca ficam no repositório. */
 let CTRL={inspecoes:{},contatos:{},envios:[],acomp:{}};
 let SEND_FILTER='pendente';
-let FOLLOW_FILTER='aberto';
+let FOLLOW_FILTER='aberto',FOLLOW_PRIO='todas',FOLLOW_MARCO='todos',FOLLOW_N=25;
 let DEMO=false;
 
 /* Escores PROMIS (bruto, recodificação da dor e T-score) são calculados exclusivamente
@@ -557,8 +570,9 @@ function render(){
   renderParticipation(rows);
   renderPaired();
   renderIndependent();
-  /* triagem assistencial inclui respostas repetidas: um sinal novo não pode ficar oculto */
-  renderFollowup(DATA.filter(function(r){return ACTIVE.has(r.marker);}));
+  /* triagem assistencial inclui respostas repetidas (um sinal novo não pode ficar oculto) e tem
+     filtros próprios de situação, prioridade, marco e quantidade, independentes dos chips de marco */
+  renderFollowup(DATA);
   renderAudit();
   renderEnvios();
 }
@@ -1565,17 +1579,17 @@ function renderFollowup(rows){
     const rg=rgKey(r.rg_cbmerj);
     const acomp=CTRL.acomp[acompKey(rg,r.marker)]||{status:'Não resolvido',contatoEm:'',canal:''};
     return {row:r,rg:rg,alert:followupSignals(r),c:CTRL.contatos[rg]||null,acomp:acomp};
-  }).filter(function(x){return x.alert.score>=2;});
+  }).filter(function(x){return x.alert.score>=2;})
+    .filter(function(x){return (FOLLOW_MARCO==='todos'||x.row.marker===FOLLOW_MARCO)&&(FOLLOW_PRIO==='todas'||(FOLLOW_PRIO==='alta')===(x.alert.score>=4));});
   const cont={'Não resolvido':0,'Parcialmente resolvido':0,'Resolvido':0};
   const vistos={};
   all.forEach(function(x){const k=acompKey(x.rg,x.row.marker);if(!vistos[k]){vistos[k]=1;cont[x.acomp.status]=(cont[x.acomp.status]||0)+1;}});
   document.getElementById('followupSummary').innerHTML='<span><strong>'+cont['Não resolvido']+'</strong>não resolvidos</span><span><strong>'+cont['Parcialmente resolvido']+'</strong>resolvidos parcialmente</span><span><strong>'+cont['Resolvido']+'</strong>resolvidos</span>';
-  document.querySelectorAll('#followupFilters .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.follow===FOLLOW_FILTER));});
   const filtrados=all.filter(function(x){return FOLLOW_FILTER==='todos'||(FOLLOW_FILTER==='aberto'?x.acomp.status!=='Resolvido':x.acomp.status===FOLLOW_FILTER);})
     .sort(function(a,b){return b.alert.score-a.alert.score||FOLLOW_STATUS.indexOf(a.acomp.status)-FOLLOW_STATUS.indexOf(b.acomp.status);});
-  const LIMITE=200,list=filtrados.slice(0,LIMITE);
+  const list=filtrados.slice(0,FOLLOW_N);
   const note=document.getElementById('followupNote');
-  if(!list.length){document.getElementById('followupRows').innerHTML='<tr><td colspan="8" class="empty">Nenhum caso nesta situação no filtro atual.</td></tr>';note.textContent=all.length?'':'Nenhum sinal de acompanhamento no filtro atual.';return;}
+  if(!list.length){document.getElementById('followupRows').innerHTML='<tr><td colspan="8" class="empty">Nenhum caso com os filtros selecionados.</td></tr>';note.textContent='';return;}
   const canais={whatsapp:'WhatsApp',email:'e-mail'};
   document.getElementById('followupRows').innerHTML=list.map(function(x){
     const high=x.alert.score>=4,r=x.row,c=x.c;
@@ -1587,16 +1601,16 @@ function renderFollowup(rows){
       const tel=String(c.Telefone_WhatsApp||'').replace(/\D/g,''),email=emailUnico(x.rg);
       const attrs=' data-rg="'+esc(x.rg)+'" data-marco="'+esc(r.marker)+'" data-sinais="'+esc(x.alert.signals.join('; '))+'"';
       msg='';
-      if(tel)msg+='<a class="send-btn wa follow-btn" target="_blank" rel="noopener"'+attrs+' data-canal="whatsapp" href="https://wa.me/'+tel+'?text='+encodeURIComponent(mensagemAcompanhamento(c,x,'whatsapp'))+'">WhatsApp</a>';
-      if(email)msg+='<a class="send-btn mail follow-btn"'+attrs+' data-canal="email" href="mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Programa Coração de Herói — queremos ouvir você')+'&body='+encodeURIComponent(mensagemAcompanhamento(c,x,'email'))+'">E-mail</a>';
+      const mWa=mensagemAcompanhamento(c,x,'whatsapp'),mEm=mensagemAcompanhamento(c,x,'email');
+      if(tel)msg+='<a class="send-btn wa follow-btn" target="_blank" rel="noopener"'+attrs+' data-canal="whatsapp" data-msg="'+esc(mWa)+'" aria-describedby="msgPreview" href="https://wa.me/'+tel+'?text='+encodeURIComponent(mWa)+'">WhatsApp</a>';
+      if(email)msg+='<a class="send-btn mail follow-btn"'+attrs+' data-canal="email" data-msg="'+esc(mEm)+'" aria-describedby="msgPreview" href="mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Programa Coração de Herói — queremos ouvir você')+'&body='+encodeURIComponent(mEm)+'">E-mail</a>';
       if(!msg)msg='<small>sem telefone ou e-mail</small>';
     }
     if(x.acomp.contatoEm){const t=Date.parse(x.acomp.contatoEm);if(Number.isFinite(t))msg+='<br><small>último contato '+fmtData(new Date(t))+(x.acomp.canal?' · '+(canais[x.acomp.canal]||esc(x.acomp.canal)):'')+'</small>';}
     const sel='<select class="status-sel '+FOLLOW_CLASSE[x.acomp.status]+'" aria-label="Situação do caso" data-rg="'+esc(x.rg)+'" data-marco="'+esc(r.marker)+'" data-sinais="'+esc(x.alert.signals.join('; '))+'">'+FOLLOW_STATUS.map(function(s){return '<option'+(s===x.acomp.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';
     return '<tr><td>'+nome+'<br><small>RG '+esc(x.rg||maskedId(r.rg_cbmerj))+'</small></td><td>'+esc(r.marker)+'</td><td>'+(Number.isFinite(r.physicalT)?r.physicalT.toFixed(1):'—')+'</td><td>'+(Number.isFinite(r.mentalT)?r.mentalT.toFixed(1):'—')+'</td><td>'+esc(x.alert.signals.join('; '))+'</td><td><span class="priority '+(high?'high':'medium')+'">'+(high?'ALTA':'MODERADA')+'</span></td><td>'+msg+'</td><td>'+sel+'</td></tr>';
   }).join('');
-  note.textContent=(filtrados.length>list.length?'Mostrando os '+list.length+' casos de maior prioridade de '+filtrados.length+' nesta situação. ':'')
-    +'Total no filtro de marcos: '+Object.keys(vistos).length+' caso(s). Sinais de saúde emocional: a mensagem é só a abertura; prefira também ligar ou agendar atendimento. A situação e o último contato ficam gravados na aba Acompanhamento.';
+  note.textContent='Mostrando '+list.length+' de '+filtrados.length+' caso(s) com os filtros selecionados, por ordem de prioridade. Passe o cursor sobre WhatsApp ou E-mail para ver a mensagem. Sinais de saúde emocional: a mensagem é só a abertura; prefira também ligar ou agendar atendimento. A situação e o último contato ficam gravados na aba Acompanhamento.';
 }
 function salvarAcomp(rg,marco,sinais,campos){
   const k=acompKey(rg,marco);
@@ -1618,9 +1632,29 @@ document.addEventListener('change',function(ev){
 document.addEventListener('click',function(ev){
   const a=ev.target.closest&&ev.target.closest('a.follow-btn');
   if(a)salvarAcomp(a.dataset.rg,a.dataset.marco,a.dataset.sinais,{canal:a.dataset.canal});
-  const f=ev.target.closest&&ev.target.closest('#followupFilters .chip');
-  if(f){FOLLOW_FILTER=f.dataset.follow;renderFollowup(FOLLOW_ROWS);}
 });
+document.addEventListener('change',function(ev){
+  const f=ev.target.closest&&ev.target.closest('#followupFilters select');
+  if(!f)return;
+  const v=f.value,k=f.dataset.fkey;
+  if(k==='situacao')FOLLOW_FILTER=v;else if(k==='prioridade')FOLLOW_PRIO=v;else if(k==='marco')FOLLOW_MARCO=v;else FOLLOW_N=Number(v)||25;
+  renderFollowup(FOLLOW_ROWS);
+});
+/* Prévia da mensagem ao passar o cursor (ou focar pelo teclado) no botão de contato. */
+function mostrarPrevia(a){
+  let box=document.getElementById('msgPreview');
+  if(!box){box=document.createElement('div');box.id='msgPreview';box.setAttribute('role','tooltip');document.body.appendChild(box);}
+  box.innerHTML='<strong>Prévia · '+(a.dataset.canal==='email'?'e-mail':'WhatsApp')+'</strong>'+esc(a.dataset.msg);
+  box.style.display='block';
+  const r=a.getBoundingClientRect(),w=box.offsetWidth,h=box.offsetHeight;
+  let left=r.left-w-12;if(left<8)left=Math.min(r.right+12,window.innerWidth-w-8);
+  let top=r.top+r.height/2-h/2;top=Math.max(8,Math.min(top,window.innerHeight-h-8));
+  box.style.left=left+'px';box.style.top=top+'px';
+}
+function esconderPrevia(){const box=document.getElementById('msgPreview');if(box)box.style.display='none';}
+['mouseover','focusin'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a)mostrarPrevia(a);});});
+['mouseout','focusout'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a&&!(ev.relatedTarget&&a.contains(ev.relatedTarget)))esconderPrevia();});});
+window.addEventListener('scroll',esconderPrevia,true);
 
 document.querySelectorAll('#markerFilters .chip').forEach(function(button){
   button.addEventListener('click',function(){

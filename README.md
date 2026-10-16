@@ -85,7 +85,9 @@ crie a propriedade do script `FORM_URL` com o link do formulário do piloto
 Cada caso (RG + marco) mostra o nome do militar (aba `Contatos`), mensagem empática pronta no
 WhatsApp ou no e-mail conforme o problema relatado e a situação do caso (`Não resolvido`,
 `Parcialmente resolvido`, `Resolvido`), gravada com o último contato na aba `Acompanhamento`
-(criada automaticamente; `action=acompanhamento`, exige token). Ver README da produção.
+(criada automaticamente; `action=acompanhamento`, exige token). Filtros próprios de situação,
+prioridade, marco e quantidade (10/25/50/100) e prévia da mensagem ao passar o cursor. Ver
+README da produção.
 
 ### Respostas repetidas
 
