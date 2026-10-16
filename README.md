@@ -80,6 +80,15 @@ de 3 dias, execução diária às 8h; ver README da produção). No piloto, ante
 crie a propriedade do script `FORM_URL` com o link do formulário do piloto
 (`https://ricardodesouzacarvalho.github.io/coracao-de-heroi-dev/`) e use apenas contatos de teste.
 
+### Sinais para acompanhamento assistencial
+
+Cada caso (RG + marco) mostra o nome do militar (aba `Contatos`), mensagem empática pronta no
+WhatsApp ou no e-mail conforme o problema relatado e a situação do caso (`Não resolvido`,
+`Parcialmente resolvido`, `Resolvido`), gravada com o último contato na aba `Acompanhamento`
+(criada automaticamente; `action=acompanhamento`, exige token). Filtros próprios de situação,
+prioridade, marco e quantidade (10/25/50/100) e prévia da mensagem ao passar o cursor. Ver
+README da produção.
+
 ### Respostas repetidas
 
 Não há bloqueio: o mesmo RG pode responder mais de uma vez o mesmo marco. Nas estatísticas do

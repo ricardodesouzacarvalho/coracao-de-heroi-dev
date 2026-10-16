@@ -89,6 +89,13 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .alerta{color:#8a1c1c;font-size:.7rem}
 .priority{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.65rem;font-weight:700;color:#fff}
 .priority.high{background:var(--danger)}.priority.medium{background:var(--orange)}
+.follow-filters{display:flex;flex-wrap:wrap;gap:10px 14px;margin:6px 0 12px}
+.follow-filters label{display:flex;flex-direction:column;gap:3px;font-size:.68rem;font-weight:700;color:#5b636b;text-transform:uppercase;letter-spacing:.03em}
+.follow-filters select{font:inherit;font-size:.78rem;font-weight:400;text-transform:none;letter-spacing:0;color:#1f2933;border:1px solid #c9ced4;border-radius:8px;padding:5px 8px;background:#fff;min-width:130px}
+#msgPreview{position:fixed;z-index:60;display:none;max-width:440px;max-height:70vh;overflow:auto;white-space:pre-wrap;background:#fff;color:#1f2933;border:1px solid #c9ced4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;font-size:.74rem;line-height:1.45;pointer-events:none}
+#msgPreview strong{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:#7a1f1f;margin-bottom:6px}
+.status-sel{font:inherit;font-size:.72rem;border-radius:8px;padding:3px 6px;border:1px solid #c9ced4;background:#fff}
+.status-sel.nao{border-color:#e3a3a3;background:#fdf0f0}.status-sel.parcial{border-color:#e6c46e;background:#fff8e6}.status-sel.ok{border-color:#8fc9a5;background:#eaf6ef}
 .auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px;text-align:center}
 .auth-gate h2{color:var(--brand-dark);margin:0 0 8px;font-size:1.1rem}
 .auth-gate p{color:var(--muted);font-size:.82rem;margin:0 0 14px}
@@ -220,10 +227,26 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 
     <section class="panel wide">
       <h2>Sinais para acompanhamento assistencial</h2>
-      <p class="panel-sub">Triagem gerencial, não diagnóstica. Identificadores aparecem mascarados e exigem conferência na base restrita.</p>
+      <p class="panel-sub">Triagem gerencial, não diagnóstica. O nome vem da aba Contatos (acesso restrito pela chave). A mensagem abre o WhatsApp ou o e-mail já preenchidos, com abertura empática e perguntas sobre cada problema; a situação do caso fica gravada na aba Acompanhamento da planilha.</p>
+      <div class="send-summary" id="followupSummary"></div>
+      <div class="follow-filters" id="followupFilters">
+        <label>Situação<select data-fkey="situacao">
+          <option value="aberto" selected>Em aberto</option><option value="Não resolvido">Não resolvidos</option>
+          <option value="Parcialmente resolvido">Resolvidos parcialmente</option><option value="Resolvido">Resolvidos</option><option value="todos">Todas</option>
+        </select></label>
+        <label>Prioridade<select data-fkey="prioridade">
+          <option value="todas" selected>Todas</option><option value="alta">Alta</option><option value="moderada">Moderada</option>
+        </select></label>
+        <label>Marco<select data-fkey="marco">
+          <option value="todos" selected>Todos</option><option>Inicial</option><option>90 dias</option><option>180 dias</option><option>270 dias</option><option>Fora dos marcos</option>
+        </select></label>
+        <label>Mostrar<select data-fkey="n">
+          <option>10</option><option selected>25</option><option>50</option><option>100</option>
+        </select></label>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Identificador</th><th>Marco</th><th>T físico</th><th>T mental</th><th>Sinais encontrados</th><th>Prioridade</th></tr></thead>
+          <thead><tr><th>Militar</th><th>Marco</th><th>T físico</th><th>T mental</th><th>Sinais encontrados</th><th>Prioridade</th><th>Mensagem</th><th>Situação</th></tr></thead>
           <tbody id="followupRows"></tbody>
         </table>
       </div>
@@ -277,8 +300,9 @@ let DATA=[];
 let AUDIT=[];
 /* Controle de envio: datas oficiais (RG → AAAA-MM-DD), contatos (RG → objeto) e envios
    registrados. Vêm do action=data (protegido por token); nunca ficam no repositório. */
-let CTRL={inspecoes:{},contatos:{},envios:[]};
+let CTRL={inspecoes:{},contatos:{},envios:[],acomp:{}};
 let SEND_FILTER='pendente';
+let FOLLOW_FILTER='aberto',FOLLOW_PRIO='todas',FOLLOW_MARCO='todos',FOLLOW_N=25;
 let DEMO=false;
 
 /* Escores PROMIS (bruto, recodificação da dor e T-score) são calculados exclusivamente
@@ -458,6 +482,7 @@ function hideGate(){
 function enterDemo(note){
   DATA=splitAudit(generateDemo());DEMO=true;
   CTRL=demoCtrl();
+  DATA.forEach(function(r,i){const rg=rgKey(r.rg_cbmerj);if(rg&&!CTRL.contatos[rg])CTRL.contatos[rg]={RG:rg,Nome:'MILITAR '+rg,'Posto/Graduação':['CB','2 SGT','SUBTEN','CAP'][i%4],Telefone_WhatsApp:'+5521900000000','E-mail':'',Observação:''};});
   setSource('Demonstração · '+(DATA.length+AUDIT.length)+' respostas',true);
   document.getElementById('statusMsg').textContent=note||'';
   hideGate();render();
@@ -545,8 +570,9 @@ function render(){
   renderParticipation(rows);
   renderPaired();
   renderIndependent();
-  /* triagem assistencial inclui respostas repetidas: um sinal novo não pode ficar oculto */
-  renderFollowup(DATA.filter(function(r){return ACTIVE.has(r.marker);}));
+  /* triagem assistencial inclui respostas repetidas (um sinal novo não pode ficar oculto) e tem
+     filtros próprios de situação, prioridade, marco e quantidade, independentes dos chips de marco */
+  renderFollowup(DATA);
   renderAudit();
   renderEnvios();
 }
@@ -1352,29 +1378,59 @@ function renderIndependent(){
 
 function maskedId(v){const s=String(v||'');return s.length<=3?'•••'+s:'•••'+s.slice(-3);}
 function followupSignals(r){
-  const signals=[];let score=0;
-  if(Number.isFinite(r.physicalT)&&r.physicalT<40){signals.push('T físico < 40');score+=2;}
-  if(Number.isFinite(r.mentalT)&&r.mentalT<40){signals.push('T mental < 40');score+=2;}
-  if(r.contexto_medicacao_adesao==='4 vezes ou mais'){signals.push('adesão medicamentosa');score+=2;}
-  if(['Mais de 60 dias','Ainda pendente'].includes(r.prem_exames_tempo_espera)){signals.push('exame pendente prolongado');score+=2;}
-  if(String(r.prem_exames_status||'').includes('não consegui')){signals.push('barreira de acesso');score+=1;}
-  if(r.tabaco_status==='Fumante atual'&&['Não houve oferta de tratamento','Tive interesse, mas não iniciei'].includes(r.tabaco_conduta)){signals.push('cessação do tabagismo');score+=1;}
-  return {signals:signals,score:score};
+  const signals=[],codes=[];let score=0;
+  if(Number.isFinite(r.physicalT)&&r.physicalT<40){signals.push('T físico < 40');codes.push('fisico');score+=2;}
+  if(Number.isFinite(r.mentalT)&&r.mentalT<40){signals.push('T mental < 40');codes.push('mental');score+=2;}
+  if(r.contexto_medicacao_adesao==='4 vezes ou mais'){signals.push('adesão medicamentosa');codes.push('adesao');score+=2;}
+  if(['Mais de 60 dias','Ainda pendente'].includes(r.prem_exames_tempo_espera)){signals.push('exame pendente prolongado');codes.push('exame');score+=2;}
+  if(String(r.prem_exames_status||'').includes('não consegui')){signals.push('barreira de acesso');codes.push('acesso');score+=1;}
+  if(r.tabaco_status==='Fumante atual'&&['Não houve oferta de tratamento','Tive interesse, mas não iniciei'].includes(r.tabaco_conduta)){signals.push('cessação do tabagismo');codes.push('tabaco');score+=1;}
+  return {signals:signals,codes:codes,score:score};
 }
+/* Mensagem de acompanhamento: abertura empática, reconhecimento de que precisamos melhorar,
+   um parágrafo por problema com pergunta aberta e convite para buscar a solução juntos. */
+const FOLLOW_TEXTOS={
+  fisico:function(){return 'Sua saúde física: suas respostas mostram que o dia a dia tem exigido mais do seu corpo do que gostaríamos (cansaço, dores ou limitação para as atividades). O que tem sido mais difícil para você, e desde quando?';},
+  mental:function(){return 'Seu bem-estar emocional: suas respostas indicam que este tem sido um período pesado. Isso é importante para nós, e você não precisa enfrentar isso sem apoio. Se quiser, conte como tem se sentido; a conversa é reservada e podemos marcar um atendimento.';},
+  adesao:function(){return 'Medicamentos: você contou que deixou de tomar algumas doses na última semana. Existe alguma dificuldade (esquecimento, efeito colateral, custo, acesso à farmácia ou dúvida sobre o remédio)? Podemos ajudar a organizar.';},
+  exame:function(r){const t=String(r.prem_exames_tempo_espera||'');return 'Exames: '+(t==='Ainda pendente'?'há exame seu ainda pendente':'a espera pelos seus exames passou de 60 dias')+'. Qual exame ainda não foi feito ou não teve resultado, e em que etapa ele parou (pedido, agendamento ou resultado)?';},
+  acesso:function(){return 'Acesso aos exames: você relatou que não conseguiu realizar exames solicitados. O que atrapalhou (agendamento, vaga, deslocamento, horário ou documentação)?';},
+  tabaco:function(){return 'Tabagismo: você informou que fuma e que ainda não recebeu, ou não chegou a iniciar, o tratamento para parar. Gostaríamos de oferecer uma avaliação com a pneumologista da unidade. Que dia e horário seriam melhores para você?';}
+};
+function mensagemAcompanhamento(c,x,canal){
+  const nome=c?tratamento(c):'';
+  const itens=x.alert.codes.map(function(k){return '• '+FOLLOW_TEXTOS[k](x.row);});
+  return 'Olá'+(nome?', '+nome:'')+'!\n\n'
+    +'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
+    +'Obrigado por responder ao nosso questionário'+(x.row.marker&&x.row.marker!=='Fora dos marcos'?' do marco '+(x.row.marker==='Inicial'?'inicial':x.row.marker):'')+'. Lendo as suas respostas, percebemos que '+(itens.length>1?'alguns pontos do seu cuidado não estão como deveriam':'um ponto do seu cuidado não está como deveria')+'. Sentimos muito por isso e reconhecemos que precisamos melhorar.\n\n'
+    +itens.join('\n\n')+'\n\n'
+    +'Queremos entender melhor o que está acontecendo para, juntos, encontrarmos a melhor forma de resolver. '
+    +(canal==='email'?'Pode nos contar mais respondendo este e-mail?':'Pode nos contar mais respondendo esta mensagem?')
+    +' Se preferir, combinamos uma ligação ou uma conversa na Policlínica, no dia e horário que forem melhores para você.\n\n'
+    +'Conte com a gente!\nPrograma Coração de Herói';
+}
+function emailUnico(rg){
+  const c=CTRL.contatos[rg];const e=c?String(c['E-mail']||'').trim():'';
+  if(!e)return '';
+  const n=Object.keys(CTRL.contatos).filter(function(k){return String(CTRL.contatos[k]['E-mail']||'').trim().toLowerCase()===e.toLowerCase();}).length;
+  return n===1?e:'';
+}
+function acompKey(rg,marco){return rg+'|'+marco;}
 /* ---- Controle de envio do formulário ---- */
 const SEND_WINDOWS=[{key:'Inicial',ini:0,fim:60},{key:'90 dias',ini:61,fim:130},{key:'180 dias',ini:140,fim:220},{key:'270 dias',ini:230,fim:310}];
 const POSTOS={'SD':'Sd','CB':'Cb','3 SGT':'3º Sgt','2 SGT':'2º Sgt','1 SGT':'1º Sgt','SUBTEN':'Subten','2 TEN':'2º Ten','1 TEN':'1º Ten','CAP':'Cap','MAJ':'Maj','TEN CEL':'Ten Cel','CEL':'Cel'};
 function rgKey(v){return String(v==null?'':v).replace(/\D/g,'');}
 function buildCtrl(raw){
-  const ctrl={inspecoes:{},contatos:{},envios:[]};
+  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{}};
   (raw.inspecoes||[]).forEach(function(p){const rg=rgKey(p[0]);const d=String(p[1]||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))ctrl.inspecoes[rg]=d;});
   rowsFromSheet(raw.contatos||[]).forEach(function(c){const rg=rgKey(c.RG);if(rg)ctrl.contatos[rg]=c;});
   ctrl.envios=rowsFromSheet(raw.envios||[]).map(function(e){return {rg:rgKey(e.rg_cbmerj),marco:String(e.marco||''),canal:String(e.canal||''),quando:String(e.registrado_em||'')};});
+  rowsFromSheet(raw.acompanhamento||[]).forEach(function(a){const rg=rgKey(a.rg_cbmerj);if(rg)ctrl.acomp[acompKey(rg,String(a.marco||''))]={status:String(a.status||'Não resolvido'),contatoEm:String(a.ultimo_contato_em||''),canal:String(a.canal_contato||'')};});
   return ctrl;
 }
 function demoCtrl(){
   /* Militares fictícios em várias situações, só para a demonstração. */
-  const ctrl={inspecoes:{},contatos:{},envios:[]};
+  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{}};
   const hoje=new Date();hoje.setHours(0,0,0,0);
   [5,20,58,70,100,125,135,150,200,215,232,290,305,50,226].forEach(function(dias,i){
     const rg='9'+String(i+1).padStart(4,'0');const d=new Date(hoje.getTime()-dias*86400000);
@@ -1494,7 +1550,7 @@ function renderEnvios(){
     :'Canal sugerido (contorno amarelo): e-mail quando houver e-mail válido e exclusivo; senão, WhatsApp. O registro do envio é gravado na aba Envios da planilha ao clicar no botão. Se o e-mail automático estiver ativo, quem tem e-mail recebe o convite e até 2 lembretes, com intervalo de 3 dias; esses envios aparecem aqui como “e-mail automático”.';
 }
 document.addEventListener('click',function(ev){
-  const a=ev.target.closest&&ev.target.closest('a.send-btn');
+  const a=ev.target.closest&&ev.target.closest('a.send-btn:not(.follow-btn)');
   if(a)registrarEnvio(a.dataset.rg,a.dataset.marco,a.dataset.canal);
   const f=ev.target.closest&&ev.target.closest('#sendFilters .chip');
   if(f){SEND_FILTER=f.dataset.send;renderEnvios();}
@@ -1514,14 +1570,91 @@ function renderAudit(){
   document.getElementById('auditNote').textContent=rows.length?rows.length+' resposta(s) de '+nRg+' RG(s) fora do programa, excluídas das análises. Ao confirmar o RG correto, corrija-o na planilha (ou inclua o RG na aba Inspecoes) e rode corrigirInspecoesExistentes().':'';
 }
 
+let FOLLOW_ROWS=[];
+const FOLLOW_STATUS=['Não resolvido','Parcialmente resolvido','Resolvido'];
+const FOLLOW_CLASSE={'Não resolvido':'nao','Parcialmente resolvido':'parcial','Resolvido':'ok'};
 function renderFollowup(rows){
-  const all=rows.map(function(r){return {row:r,alert:followupSignals(r)};}).filter(function(x){return x.alert.score>=2;}).sort(function(a,b){return b.alert.score-a.alert.score;});
-  const list=all.slice(0,15);
+  FOLLOW_ROWS=rows;
+  const all=rows.map(function(r){
+    const rg=rgKey(r.rg_cbmerj);
+    const acomp=CTRL.acomp[acompKey(rg,r.marker)]||{status:'Não resolvido',contatoEm:'',canal:''};
+    return {row:r,rg:rg,alert:followupSignals(r),c:CTRL.contatos[rg]||null,acomp:acomp};
+  }).filter(function(x){return x.alert.score>=2;})
+    .filter(function(x){return (FOLLOW_MARCO==='todos'||x.row.marker===FOLLOW_MARCO)&&(FOLLOW_PRIO==='todas'||(FOLLOW_PRIO==='alta')===(x.alert.score>=4));});
+  const cont={'Não resolvido':0,'Parcialmente resolvido':0,'Resolvido':0};
+  const vistos={};
+  all.forEach(function(x){const k=acompKey(x.rg,x.row.marker);if(!vistos[k]){vistos[k]=1;cont[x.acomp.status]=(cont[x.acomp.status]||0)+1;}});
+  document.getElementById('followupSummary').innerHTML='<span><strong>'+cont['Não resolvido']+'</strong>não resolvidos</span><span><strong>'+cont['Parcialmente resolvido']+'</strong>resolvidos parcialmente</span><span><strong>'+cont['Resolvido']+'</strong>resolvidos</span>';
+  const filtrados=all.filter(function(x){return FOLLOW_FILTER==='todos'||(FOLLOW_FILTER==='aberto'?x.acomp.status!=='Resolvido':x.acomp.status===FOLLOW_FILTER);})
+    .sort(function(a,b){return b.alert.score-a.alert.score||FOLLOW_STATUS.indexOf(a.acomp.status)-FOLLOW_STATUS.indexOf(b.acomp.status);});
+  const list=filtrados.slice(0,FOLLOW_N);
   const note=document.getElementById('followupNote');
-  if(!list.length){document.getElementById('followupRows').innerHTML='<tr><td colspan="6" class="empty">Nenhum sinal de acompanhamento no filtro atual.</td></tr>';note.textContent='';return;}
-  document.getElementById('followupRows').innerHTML=list.map(function(x){const high=x.alert.score>=4;return '<tr><td>'+esc(maskedId(x.row.rg_cbmerj))+'</td><td>'+esc(x.row.marker)+'</td><td>'+(Number.isFinite(x.row.physicalT)?x.row.physicalT.toFixed(1):'—')+'</td><td>'+(Number.isFinite(x.row.mentalT)?x.row.mentalT.toFixed(1):'—')+'</td><td>'+esc(x.alert.signals.join('; '))+'</td><td><span class="priority '+(high?'high':'medium')+'">'+(high?'ALTA':'MODERADA')+'</span></td></tr>';}).join('');
-  note.textContent=all.length>list.length?'Mostrando os '+list.length+' casos de maior prioridade de um total de '+all.length+' com sinais no filtro atual.':'Total: '+all.length+' caso(s) com sinais no filtro atual.';
+  if(!list.length){document.getElementById('followupRows').innerHTML='<tr><td colspan="8" class="empty">Nenhum caso com os filtros selecionados.</td></tr>';note.textContent='';return;}
+  const canais={whatsapp:'WhatsApp',email:'e-mail'};
+  document.getElementById('followupRows').innerHTML=list.map(function(x){
+    const high=x.alert.score>=4,r=x.row,c=x.c;
+    const nome=c?esc(tratamento(c)):'<span class="alerta">sem contato cadastrado</span>';
+    let msg;
+    if(!c)msg='—';
+    else if(situacaoContato(c)==='suspenso')msg='<small>Desistência: envio suspenso</small>';
+    else{
+      const tel=String(c.Telefone_WhatsApp||'').replace(/\D/g,''),email=emailUnico(x.rg);
+      const attrs=' data-rg="'+esc(x.rg)+'" data-marco="'+esc(r.marker)+'" data-sinais="'+esc(x.alert.signals.join('; '))+'"';
+      msg='';
+      const mWa=mensagemAcompanhamento(c,x,'whatsapp'),mEm=mensagemAcompanhamento(c,x,'email');
+      if(tel)msg+='<a class="send-btn wa follow-btn" target="_blank" rel="noopener"'+attrs+' data-canal="whatsapp" data-msg="'+esc(mWa)+'" aria-describedby="msgPreview" href="https://wa.me/'+tel+'?text='+encodeURIComponent(mWa)+'">WhatsApp</a>';
+      if(email)msg+='<a class="send-btn mail follow-btn"'+attrs+' data-canal="email" data-msg="'+esc(mEm)+'" aria-describedby="msgPreview" href="mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Programa Coração de Herói — queremos ouvir você')+'&body='+encodeURIComponent(mEm)+'">E-mail</a>';
+      if(!msg)msg='<small>sem telefone ou e-mail</small>';
+    }
+    if(x.acomp.contatoEm){const t=Date.parse(x.acomp.contatoEm);if(Number.isFinite(t))msg+='<br><small>último contato '+fmtData(new Date(t))+(x.acomp.canal?' · '+(canais[x.acomp.canal]||esc(x.acomp.canal)):'')+'</small>';}
+    const sel='<select class="status-sel '+FOLLOW_CLASSE[x.acomp.status]+'" aria-label="Situação do caso" data-rg="'+esc(x.rg)+'" data-marco="'+esc(r.marker)+'" data-sinais="'+esc(x.alert.signals.join('; '))+'">'+FOLLOW_STATUS.map(function(s){return '<option'+(s===x.acomp.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';
+    return '<tr><td>'+nome+'<br><small>RG '+esc(x.rg||maskedId(r.rg_cbmerj))+'</small></td><td>'+esc(r.marker)+'</td><td>'+(Number.isFinite(r.physicalT)?r.physicalT.toFixed(1):'—')+'</td><td>'+(Number.isFinite(r.mentalT)?r.mentalT.toFixed(1):'—')+'</td><td>'+esc(x.alert.signals.join('; '))+'</td><td><span class="priority '+(high?'high':'medium')+'">'+(high?'ALTA':'MODERADA')+'</span></td><td>'+msg+'</td><td>'+sel+'</td></tr>';
+  }).join('');
+  note.textContent='Mostrando '+list.length+' de '+filtrados.length+' caso(s) com os filtros selecionados, por ordem de prioridade. Passe o cursor sobre WhatsApp ou E-mail para ver a mensagem. Sinais de saúde emocional: a mensagem é só a abertura; prefira também ligar ou agendar atendimento. A situação e o último contato ficam gravados na aba Acompanhamento.';
 }
+function salvarAcomp(rg,marco,sinais,campos){
+  const k=acompKey(rg,marco);
+  const antes=CTRL.acomp[k]?Object.assign({},CTRL.acomp[k]):null;
+  const novo=Object.assign({status:'Não resolvido',contatoEm:'',canal:''},antes||{});
+  if(campos.status)novo.status=campos.status;
+  if(campos.canal){novo.canal=campos.canal;novo.contatoEm=new Date().toISOString();}
+  CTRL.acomp[k]=novo;renderFollowup(FOLLOW_ROWS);
+  if(DEMO)return;
+  const desfaz=function(msg){if(antes)CTRL.acomp[k]=antes;else delete CTRL.acomp[k];renderFollowup(FOLLOW_ROWS);alert(msg);};
+  jsonp(SCRIPT_URL,Object.assign({action:'acompanhamento',token:sessionStorage.getItem(TOKEN_KEY),rg:rg,marco:marco,sinais:sinais},campos)).then(function(r){
+    if(!r||!r.ok)desfaz('Não foi possível gravar na planilha'+(r&&r.error?' ('+r.error+')':'')+'. Confira se o Code.gs atualizado está implantado.');
+  }).catch(function(){desfaz('Sem conexão com a planilha: a alteração não foi gravada.');});
+}
+document.addEventListener('change',function(ev){
+  const sel=ev.target.closest&&ev.target.closest('select.status-sel');
+  if(sel)salvarAcomp(sel.dataset.rg,sel.dataset.marco,sel.dataset.sinais,{status:sel.value});
+});
+document.addEventListener('click',function(ev){
+  const a=ev.target.closest&&ev.target.closest('a.follow-btn');
+  if(a)salvarAcomp(a.dataset.rg,a.dataset.marco,a.dataset.sinais,{canal:a.dataset.canal});
+});
+document.addEventListener('change',function(ev){
+  const f=ev.target.closest&&ev.target.closest('#followupFilters select');
+  if(!f)return;
+  const v=f.value,k=f.dataset.fkey;
+  if(k==='situacao')FOLLOW_FILTER=v;else if(k==='prioridade')FOLLOW_PRIO=v;else if(k==='marco')FOLLOW_MARCO=v;else FOLLOW_N=Number(v)||25;
+  renderFollowup(FOLLOW_ROWS);
+});
+/* Prévia da mensagem ao passar o cursor (ou focar pelo teclado) no botão de contato. */
+function mostrarPrevia(a){
+  let box=document.getElementById('msgPreview');
+  if(!box){box=document.createElement('div');box.id='msgPreview';box.setAttribute('role','tooltip');document.body.appendChild(box);}
+  box.innerHTML='<strong>Prévia · '+(a.dataset.canal==='email'?'e-mail':'WhatsApp')+'</strong>'+esc(a.dataset.msg);
+  box.style.display='block';
+  const r=a.getBoundingClientRect(),w=box.offsetWidth,h=box.offsetHeight;
+  let left=r.left-w-12;if(left<8)left=Math.min(r.right+12,window.innerWidth-w-8);
+  let top=r.top+r.height/2-h/2;top=Math.max(8,Math.min(top,window.innerHeight-h-8));
+  box.style.left=left+'px';box.style.top=top+'px';
+}
+function esconderPrevia(){const box=document.getElementById('msgPreview');if(box)box.style.display='none';}
+['mouseover','focusin'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a)mostrarPrevia(a);});});
+['mouseout','focusout'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a&&!(ev.relatedTarget&&a.contains(ev.relatedTarget)))esconderPrevia();});});
+window.addEventListener('scroll',esconderPrevia,true);
 
 document.querySelectorAll('#markerFilters .chip').forEach(function(button){
   button.addEventListener('click',function(){

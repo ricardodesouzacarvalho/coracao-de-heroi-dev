@@ -33,6 +33,8 @@
  *    Coluna Observação: "Desistência" suspende todo envio (e-mail automático e lista do dashboard);
  *    "Deixou de responder" mantém os envios, com mensagem de resgate; vazio = regra normal.
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
+ *    A aba ACOMPANHAMENTO_SHEET (sinais assistenciais: situação do caso e último contato) também
+ *    é criada automaticamente, na primeira alteração feita pelo dashboard.
  * 7. E-mail automático a cada 3 dias (opcional): rode uma vez instalarEnvioAutomatico() pela
  *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(); para ver
  *    de qual endereço o e-mail sai, rode testeRemetente() (envia um teste só para você). Na
@@ -43,6 +45,10 @@ var SHEET_NAME = 'Respostas';
 var INSPECOES_SHEET = 'Inspecoes';
 var CONTATOS_SHEET = 'Contatos';
 var ENVIOS_SHEET = 'Envios';
+var ACOMPANHAMENTO_SHEET = 'Acompanhamento';
+var ACOMPANHAMENTO_CABECALHO = ['atualizado_em', 'rg_cbmerj', 'marco', 'status', 'sinais', 'ultimo_contato_em', 'canal_contato'];
+var ACOMPANHAMENTO_STATUS = ['Não resolvido', 'Parcialmente resolvido', 'Resolvido'];
+var ACOMPANHAMENTO_MARCOS = ['Inicial', '90 dias', '180 dias', '270 dias', 'Fora dos marcos'];
 
 /* ---- E-mail automático (roda todo dia; cada militar recebe no máximo 1 contato a cada 3 dias) ---- */
 var EMAIL_PROGRAMA = 'coracaodeheroi.1polcampinho@gmail.com';
@@ -284,6 +290,46 @@ function abaValores_(nome) {
   });
 }
 
+/** Grava (ou atualiza) a linha do caso rg + marco na aba de acompanhamento. Um caso sem linha
+ *  conta como 'Não resolvido'. Registrar contato não muda a situação; mudar a situação não apaga
+ *  o último contato. */
+function salvarAcompanhamento_(rg, marco, status, canal, sinais) {
+  var agora = new Date().toISOString();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(ACOMPANHAMENTO_SHEET) || ss.insertSheet(ACOMPANHAMENTO_SHEET);
+    if (sh.getLastRow() === 0) sh.appendRow(ACOMPANHAMENTO_CABECALHO);
+    var valores = sh.getDataRange().getValues();
+    var col = {};
+    valores[0].forEach(function (h, i) { col[String(h).trim()] = i; });
+    var linha = -1;
+    for (var i = 1; i < valores.length; i++) {
+      if (normRg_(valores[i][col.rg_cbmerj]) === rg && String(valores[i][col.marco]) === marco) { linha = i; break; }
+    }
+    var reg = linha > 0 ? valores[linha].slice() : ACOMPANHAMENTO_CABECALHO.map(function () { return ''; });
+    if (linha < 0) {
+      reg[col.rg_cbmerj] = rg;
+      reg[col.marco] = marco;
+      reg[col.status] = 'Não resolvido';
+    }
+    reg[col.atualizado_em] = agora;
+    if (status !== null) reg[col.status] = status;
+    if (sinais) reg[col.sinais] = sinais;
+    if (canal !== null) {
+      reg[col.ultimo_contato_em] = agora;
+      reg[col.canal_contato] = canal;
+    }
+    if (linha > 0) sh.getRange(linha + 1, 1, 1, reg.length).setValues([reg]);
+    else sh.appendRow(reg);
+    return { ok: true, atualizado_em: agora, status: reg[col.status],
+      ultimo_contato_em: reg[col.ultimo_contato_em], canal_contato: reg[col.canal_contato] };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function doGet(e) {
   var action = String((e && e.parameter && e.parameter.action) || '').toLowerCase();
 
@@ -324,8 +370,26 @@ function doGet(e) {
       values: sheet_().getDataRange().getValues(),
       inspecoes: Object.keys(ref).map(function (rg) { return [rg, ref[rg]]; }),
       contatos: abaValores_(CONTATOS_SHEET),
-      envios: abaValores_(ENVIOS_SHEET)
+      envios: abaValores_(ENVIOS_SHEET),
+      acompanhamento: abaValores_(ACOMPANHAMENTO_SHEET)
     });
+  }
+
+  if (action === 'acompanhamento') {
+    // Sinais para acompanhamento assistencial: situação do caso (rg + marco) e registro do contato.
+    if (!tokenOk_(e)) return output_(e, { error: 'unauthorized' });
+    var rgAc = normRg_(e.parameter.rg);
+    var marcoAc = String(e.parameter.marco || '');
+    var statusAc = e.parameter.status === undefined ? null : String(e.parameter.status);
+    var canalAc = e.parameter.canal === undefined ? null : String(e.parameter.canal).toLowerCase();
+    if (!rgAc || ACOMPANHAMENTO_MARCOS.indexOf(marcoAc) < 0 ||
+        (statusAc === null && canalAc === null) ||
+        (statusAc !== null && ACOMPANHAMENTO_STATUS.indexOf(statusAc) < 0) ||
+        (canalAc !== null && ['whatsapp', 'email'].indexOf(canalAc) < 0)) {
+      return output_(e, { error: 'parametros_invalidos' });
+    }
+    var sinaisAc = String(e.parameter.sinais || '').replace(/[\r\n]+/g, ' ').slice(0, 300);
+    return output_(e, salvarAcompanhamento_(rgAc, marcoAc, statusAc, canalAc, sinaisAc));
   }
 
   if (action === 'envio') {
