@@ -30,6 +30,8 @@
  * 6. Contatos dos militares (para o controle de envio do dashboard): aba CONTATOS_SHEET com o
  *    cabeçalho RG | Nome | Posto/Graduação | Telefone_WhatsApp | Link_WhatsApp | E-mail | Observação.
  *    Dados pessoais: ficam só na planilha e só saem pelo action=data, que exige o token.
+ *    Coluna Observação: "Desistência" suspende todo envio (e-mail automático e lista do dashboard);
+ *    "Deixou de responder" mantém os envios, com mensagem de resgate; vazio = regra normal.
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
  * 7. E-mail automático a cada 3 dias (opcional): rode uma vez instalarEnvioAutomatico() pela
  *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(). Na
@@ -512,6 +514,16 @@ function tratamento_(c) {
   return (posto ? posto + ' ' : '') + curto;
 }
 
+/** Situação do contato pela coluna Observação: 'suspenso' (Desistência: nenhuma mensagem é enviada),
+ *  'resgate' (Deixou de responder: continua recebendo, com mensagem de resgate) ou '' (regra normal). */
+function situacaoContato_(c) {
+  var o = String((c && c['Observação']) || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (o.indexOf('desist') === 0) return 'suspenso';
+  if (o.indexOf('deixou') === 0) return 'resgate';
+  return '';
+}
+
 /** Lista quem deve receber e-mail hoje (convite ou lembrete). Não envia nada. */
 function selecionarEmailsAutomaticos_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -532,12 +544,14 @@ function selecionarEmailsAutomaticos_() {
     if (j) respondidos[normRg_(r.rg_cbmerj) + '|' + j.marco] = true;
   });
   var envios = objetos_(abaValores_(ENVIOS_SHEET));
-  var lista = [], ignorados = { semEmail: 0, emailRepetido: 0, contatoRecente: 0, limite: 0 };
+  var lista = [], ignorados = { semEmail: 0, suspenso: 0, emailRepetido: 0, contatoRecente: 0, limite: 0 };
   Object.keys(ref).forEach(function (rg) {
     var dias = daysBetween_(ref[rg], hoje);
     var j = janelaAnalise_(dias);
     if (!j || respondidos[rg + '|' + j.marco]) return;
     var c = contatos[rg];
+    var situacao = situacaoContato_(c);
+    if (situacao === 'suspenso') { ignorados.suspenso++; return; }
     var email = c ? String(c['E-mail'] || '').trim() : '';
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { ignorados.semEmail++; return; }
     if (porEmail[email.toLowerCase()] > 1) { ignorados.emailRepetido++; return; }
@@ -549,7 +563,7 @@ function selecionarEmailsAutomaticos_() {
     if (recente) { ignorados.contatoRecente++; return; }
     var emails = doMarco.filter(function (e) { return String(e.canal).indexOf('email') === 0; }).length;
     if (emails > MAX_LEMBRETES) { ignorados.limite++; return; }
-    lista.push({ rg: rg, email: email, contato: c, marco: j.marco, inspecao: ref[rg],
+    lista.push({ rg: rg, email: email, contato: c, marco: j.marco, inspecao: ref[rg], resgate: situacao === 'resgate',
       prazo: somaDias_(ref[rg], j.fim), tipo: emails === 0 && doMarco.length === 0 ? 'convite' : 'lembrete' });
   });
   return { hoje: hoje, lista: lista, ignorados: ignorados };
@@ -557,18 +571,25 @@ function selecionarEmailsAutomaticos_() {
 
 function mensagemEmail_(item) {
   var form = PropertiesService.getScriptProperties().getProperty('FORM_URL') || FORM_URL_PADRAO;
-  var abertura = item.tipo === 'convite'
-    ? 'Está aberto o seu questionário de acompanhamento do marco ' + item.marco + '.'
-    : 'Ainda não recebemos a sua resposta ao questionário do marco ' + item.marco + ', e ela faz muita falta.';
+  var marco = item.marco === 'Inicial' ? 'inicial' : item.marco;
+  var reenvio = 'Estamos enviando mais uma vez o formulário de acompanhamento do marco ' + marco + ' do programa.';
+  var abertura = item.resgate
+    ? 'Sentimos a sua falta! Notamos que você deixou de responder ao acompanhamento e queremos muito continuar cuidando de você.\n\n' + reenvio
+    : reenvio;
+  var prefixo = item.tipo === 'convite' ? '' : 'Lembrete: ';
+  var assunto = prefixo + (item.resgate
+    ? 'Programa Coração de Herói — sentimos a sua falta (marco ' + item.marco + ')'
+    : 'Programa Coração de Herói — sua resposta é importante (marco ' + item.marco + ')');
   return {
-    assunto: (item.tipo === 'convite' ? '' : 'Lembrete: ') + 'Programa Coração de Herói — sua resposta é importante (marco ' + item.marco + ')',
+    assunto: assunto,
     corpo: 'Olá, ' + tratamento_(item.contato) + '!\n\n' +
       'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n' +
       abertura + '\n\n' +
       'Sua resposta é muito importante: é com ela que acompanhamos a evolução da sua saúde ao longo do ' +
       'programa e melhoramos o cuidado oferecido a você e aos demais bombeiros. Cada resposta conta.\n\n' +
-      'Leva cerca de 10 minutos e pode ser respondido até ' + ddmmaaaa_(item.prazo) + '.\n\n' +
-      'Ao preencher, informe a data da sua Inspeção de Saúde: ' + ddmmaaaa_(item.inspecao) + '.\n\n' +
+      'Leva cerca de 7 minutos e o ideal é ser respondido o quanto antes.' +
+      (item.resgate ? ' Se houve alguma dificuldade para responder, é só nos contar: responda este e-mail.' : '') + '\n\n' +
+      'Basta clicar no link abaixo:\n\n' +
       'Link: ' + form + '\n\n' +
       'Obrigado pela participação!\n' + NOME_REMETENTE + '\n\n' +
       'Se já respondeu, desconsidere esta mensagem. Para não receber mais estes lembretes, responda este e-mail.'
@@ -582,7 +603,7 @@ function previaEmailsAutomaticos() {
   sel.lista.forEach(function (i) {
     Logger.log('  ' + i.tipo + ' · RG •••' + i.rg.slice(-3) + ' · ' + i.marco + ' · prazo ' + ddmmaaaa_(i.prazo));
   });
-  Logger.log('Não enviados: ' + JSON.stringify(sel.ignorados) + ' (sem e-mail, e-mail repetido, contato nos últimos ' +
+  Logger.log('Não enviados: ' + JSON.stringify(sel.ignorados) + ' (sem e-mail, desistência, e-mail repetido, contato nos últimos ' +
     INTERVALO_MIN_DIAS + ' dias, limite de lembretes atingido).');
   return sel;
 }
