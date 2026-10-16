@@ -89,6 +89,11 @@ WhatsApp ou no e-mail conforme o problema relatado e a situação do caso (`Não
 prioridade, marco e quantidade (10/25/50/100) e prévia da mensagem ao passar o cursor. Ver
 README da produção.
 
+### Visual
+
+Brasão estilizado do CBMERJ no cabeçalho (`assets/`), paleta do brasão e resumos em rosca com
+KPI central (% resolvidos e % respondidos na janela), como na produção.
+
 ### Respostas repetidas
 
 Não há bloqueio: o mesmo RG pode responder mais de uma vez o mesmo marco. Nas estatísticas do

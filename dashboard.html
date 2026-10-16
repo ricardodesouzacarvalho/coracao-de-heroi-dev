@@ -4,20 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard PROMIS Global | Coração de Herói</title>
+<link rel="icon" type="image/png" href="assets/brasao-cbmerj-64.png">
 <style>
 :root{
-  --bg:#f4f5f7;--surface:#ffffff;--text:#25282c;--muted:#687078;--line:#dfe3e8;
-  --brand:#a4161a;--brand-dark:#671014;--gold:#b8890b;--blue:#1d5c96;--green:#287a4d;
-  --orange:#b45f18;--danger:#b42318;--gray:#78828c;
+  /* Paleta do brasão do CBMERJ: vermelho do anel, ouro da estrela e da chama, aço do campo */
+  --bg:#f3f4f5;--surface:#ffffff;--text:#23272b;--muted:#646b72;--line:#dde1e5;
+  --brand:#a51d1d;--brand-dark:#6b1414;--gold:#c9962b;--gold-ink:#8a6410;--steel:#5f666d;--steel-dark:#2b3035;--charcoal:#1f2327;
+  --blue:#1d5c96;--green:#287a4d;--orange:#b45f18;--danger:#b42318;--gray:#78828c;
+  /* estados (rosca): em aberto · em andamento · concluído — validados (CVD e visão normal) */
+  --st-open:#a51d1d;--st-mid:#c9962b;--st-done:#2e7d4f;
   --m0:#1d5c96;--m90:#b8890b;--m180:#b42318;--m270:#671014;--mout:#78828c;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",Arial,sans-serif}
-.topline{height:6px;background:var(--gold)}
-header{background:var(--brand-dark);color:#fff;padding:20px}
+.topline{height:5px;background:linear-gradient(90deg,var(--brand) 0 33%,var(--gold) 33% 67%,var(--brand) 67%)}
+header{background:linear-gradient(135deg,var(--charcoal) 0%,var(--steel-dark) 55%,#3b4046 100%);color:#fff;padding:16px 20px;border-bottom:3px solid var(--brand)}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.brand img{width:68px;height:68px;flex:none;filter:drop-shadow(0 2px 6px rgba(0,0,0,.45))}
+.brand .org{display:block;font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold);margin-bottom:2px}
 .header-inner{max-width:1240px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
 .header-inner h1{font-size:1.45rem;margin:0;font-weight:700;letter-spacing:0}
-.header-inner p{margin:4px 0 0;color:#f2e7e7;font-size:.82rem}
+.header-inner p{margin:4px 0 0;color:#d8dce0;font-size:.82rem}
 .source-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid #ffffff66;border-radius:999px;padding:6px 10px;font-size:.72rem;font-weight:700}
 .source-dot{width:8px;height:8px;border-radius:50%;background:#8bd6a6}
 .source-badge.demo .source-dot{background:#f4c95d}
@@ -30,12 +37,12 @@ header{background:var(--brand-dark);color:#fff;padding:20px}
 .status{font-size:.75rem;color:var(--muted)}
 main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:10px;margin-bottom:14px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:8px;padding:14px;min-width:0}
 .kpi .label{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
 .kpi .value{font-size:1.75rem;line-height:1.1;font-weight:700;color:var(--brand-dark);margin-top:5px}
 .kpi .detail{font-size:.72rem;color:var(--muted);margin-top:4px}
 .dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brand);border-radius:8px;padding:18px;min-width:0}
 .panel.wide{grid-column:1/-1}
 .panel h2{font-size:1rem;margin:0;color:var(--brand-dark)}
 .panel h3{font-size:.78rem;margin:18px 0 8px;color:var(--text);text-transform:uppercase;letter-spacing:.04em}
@@ -79,6 +86,20 @@ table{border-collapse:collapse;width:100%;font-size:.76rem}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
 .send-filters{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.donut-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;margin:8px 0 14px}
+.donut{width:168px;height:168px;flex:none}
+.donut .seg{cursor:pointer;transition:opacity .12s}
+.donut:hover .seg{opacity:.55}.donut .seg:hover{opacity:1}
+.donut .kpi-num{font-size:34px;font-weight:700;fill:var(--text)}
+.donut .kpi-lbl{font-size:11px;font-weight:700;fill:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.donut-legend{display:grid;gap:6px;min-width:230px}
+.donut-legend button{display:grid;grid-template-columns:12px 1fr auto auto;gap:8px;align-items:center;text-align:left;font:inherit;font-size:.8rem;color:var(--text);background:none;border:1px solid transparent;border-radius:8px;padding:5px 8px;cursor:pointer}
+.donut-legend button:hover,.donut-legend button[aria-pressed="true"]{border-color:var(--line);background:#f7f8f9}
+.donut-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.donut-legend .n{font-weight:700;font-variant-numeric:tabular-nums}
+.donut-legend .p{color:var(--muted);font-size:.72rem;font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+.donut-legend .extra{border-top:1px dashed var(--line);margin-top:4px;padding-top:6px;display:grid;gap:4px}
+.donut-legend .extra i{background:none;border:2px solid var(--steel)}
 .send-summary{display:flex;flex-wrap:wrap;gap:8px 18px;margin:6px 0 10px;font-size:.8rem;color:var(--muted)}
 .send-summary strong{color:var(--text);font-size:1rem;margin-right:3px}
 .send-btn{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:4px 9px;margin:2px 4px 2px 0;font:600 .72rem inherit;text-decoration:none;color:var(--text);background:var(--surface);cursor:pointer;white-space:nowrap}
@@ -105,7 +126,7 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .auth-gate .primary{background:var(--brand);color:#fff}
 .auth-gate .ghost{background:#edf0f2;color:var(--text)}
 .auth-error{color:var(--danger);font-size:.75rem;min-height:16px;margin:0 0 10px}
-.logout{color:#f2e7e7;font-size:.7rem;text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;margin-left:8px;display:none}
+.logout{color:#e6e9ec;font-size:.7rem;text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;margin-left:8px;display:none}
 footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border-top:1px solid var(--line)}
 @media(max-width:1050px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:820px){.dashboard-grid{grid-template-columns:1fr}.panel.wide{grid-column:auto}.split{grid-template-columns:1fr}.marker-counts{grid-template-columns:repeat(2,1fr)}}
@@ -116,9 +137,13 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 <div class="topline"></div>
 <header>
   <div class="header-inner">
-    <div>
-      <h1>Programa Coração de Herói</h1>
-      <p>Dashboard longitudinal PROMIS Global Health, experiência, acesso e adesão</p>
+    <div class="brand">
+      <img src="assets/brasao-cbmerj.webp" alt="Brasão do Corpo de Bombeiros Militar do Estado do Rio de Janeiro" width="68" height="68">
+      <div>
+        <span class="org">CBMERJ · 1ª Policlínica – Campinho</span>
+        <h1>Programa Coração de Herói</h1>
+        <p>Dashboard longitudinal PROMIS Global Health, experiência, acesso e adesão</p>
+      </div>
     </div>
     <div class="source-badge" id="sourceBadge"><span class="source-dot"></span><span id="sourceLabel">Carregando</span><button class="logout" id="logoutBtn" type="button">sair</button></div>
   </div>
@@ -136,6 +161,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 </div>
 <main>
   <section class="auth-gate" id="authGate" style="display:none" aria-label="Acesso restrito">
+    <img src="assets/brasao-cbmerj.webp" alt="" width="72" height="72" style="display:block;margin:0 auto 8px">
     <h2>Acesso restrito</h2>
     <p>Este painel exibe dados assistenciais do programa, incluindo sinais individuais para acompanhamento. Informe a chave de acesso fornecida pela coordenação.</p>
     <p class="auth-error" id="authError"></p>
@@ -1521,8 +1547,13 @@ function renderEnvios(){
   const itens=listaEnvios();
   const cont={pendente:0,enviado:0,respondido:0,proximo:0,suspenso:0};
   itens.forEach(function(i){cont[i.situacao]++;});
-  document.getElementById('sendSummary').innerHTML=
-    '<span><strong>'+cont.pendente+'</strong>pendentes</span><span><strong>'+cont.enviado+'</strong>enviados, sem resposta</span><span><strong>'+cont.respondido+'</strong>respondidos na janela</span><span><strong>'+cont.proximo+'</strong>com janela abrindo em até 14 dias</span><span><strong>'+cont.suspenso+'</strong>suspensos (desistência)</span>';
+  /* Rosca: só quem está na janela agora (respondidos, enviados sem resposta, pendentes); quem
+     abre em breve e os suspensos ficam fora do % e aparecem abaixo da legenda. */
+  document.getElementById('sendSummary').innerHTML=donutHTML({act:'send',current:SEND_FILTER,kpiKey:'respondido',kpiLabel:'respondidos',kpiLabel2:'na janela',aria:'Respondidos dentro da janela',
+    segs:[{key:'respondido',label:'Respondidos na janela',n:cont.respondido,color:'var(--st-done)'},
+          {key:'enviado',label:'Enviados, sem resposta',n:cont.enviado,color:'var(--st-mid)'},
+          {key:'pendente',label:'Pendentes (sem envio)',n:cont.pendente,color:'var(--st-open)'}],
+    extras:[{key:'proximo',label:'Janela abrindo em até 14 dias',n:cont.proximo},{key:'suspenso',label:'Suspensos (desistência)',n:cont.suspenso}]});
   document.querySelectorAll('#sendFilters .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.send===SEND_FILTER));});
   const lista=itens.filter(function(i){return i.situacao===SEND_FILTER;});
   const rotulo={pendente:'Pendente',enviado:'Enviado',respondido:'Respondido',proximo:'Abre em breve',suspenso:'Suspenso'};
@@ -1571,6 +1602,37 @@ function renderAudit(){
 }
 
 let FOLLOW_ROWS=[];
+/* Gráfico de rosca com KPI central. segs: [{key,label,n,color}]; o KPI é a fração do segmento
+   kpiKey sobre o total da rosca. Legenda sempre presente (identidade nunca só pela cor), com
+   contagem e %; clicar no segmento ou na legenda aplica o filtro correspondente (data-act). */
+function donutHTML(o){
+  const total=o.segs.reduce(function(a,x){return a+x.n;},0);
+  const R=62,C=2*Math.PI*R,GAP=total&&o.segs.filter(function(x){return x.n>0;}).length>1?2.5:0;
+  const pctOf=function(n){return total?Math.round(n/total*100):0;};
+  let off=0,arcs='';
+  o.segs.forEach(function(x){
+    if(!x.n)return;
+    const len=x.n/total*C,vis=Math.max(len-GAP,0.5);
+    arcs+='<circle class="seg" data-act="'+o.act+'" data-val="'+esc(x.key)+'" data-tip="'+esc(x.label+': '+x.n+' de '+total+' ('+pctOf(x.n)+'%)')+'" cx="80" cy="80" r="'+R+'" fill="none" stroke="'+x.color+'" stroke-width="22" stroke-dasharray="'+vis.toFixed(2)+' '+(C-vis).toFixed(2)+'" stroke-dashoffset="'+(-off-GAP/2).toFixed(2)+'" transform="rotate(-90 80 80)"/>';
+    off+=len;
+  });
+  if(!total)arcs='<circle cx="80" cy="80" r="'+R+'" fill="none" stroke="#e6e9ec" stroke-width="22"/>';
+  const kpi=o.segs.filter(function(x){return x.key===o.kpiKey;})[0];
+  const kpiTxt=total?pctOf(kpi.n)+'%':'—';
+  const svg='<svg class="donut" viewBox="0 0 160 160" role="img" aria-label="'+esc(o.aria+': '+kpiTxt+'. '+o.segs.map(function(x){return x.label+' '+x.n;}).join(', '))+'">'+arcs
+    +'<text x="80" y="'+(o.kpiLabel2?78:82)+'" text-anchor="middle" class="kpi-num">'+kpiTxt+'</text><text x="80" y="'+(o.kpiLabel2?97:102)+'" text-anchor="middle" class="kpi-lbl">'+esc(o.kpiLabel)+'</text>'
+    +(o.kpiLabel2?'<text x="80" y="110" text-anchor="middle" class="kpi-lbl">'+esc(o.kpiLabel2)+'</text>':'')+'</svg>';
+  const item=function(x,extra){return '<button type="button" data-act="'+o.act+'" data-val="'+esc(x.key)+'" aria-pressed="'+String(o.current===x.key)+'"><i'+(extra?'':' style="background:'+x.color+'"')+'></i><span>'+esc(x.label)+'</span><span class="n">'+x.n+'</span><span class="p">'+(extra?'':pctOf(x.n)+'%')+'</span></button>';};
+  const legenda='<div class="donut-legend">'+o.segs.map(function(x){return item(x,false);}).join('')
+    +(o.extras&&o.extras.length?'<div class="extra">'+o.extras.map(function(x){return item(x,true);}).join('')+'</div>':'')+'</div>';
+  return '<div class="donut-wrap">'+svg+legenda+'</div>';
+}
+document.addEventListener('click',function(ev){
+  const el=ev.target.closest&&ev.target.closest('[data-act]');
+  if(!el)return;
+  if(el.dataset.act==='follow'){FOLLOW_FILTER=el.dataset.val;renderFollowup(FOLLOW_ROWS);}
+  else if(el.dataset.act==='send'){SEND_FILTER=el.dataset.val;renderEnvios();}
+});
 const FOLLOW_STATUS=['Não resolvido','Parcialmente resolvido','Resolvido'];
 const FOLLOW_CLASSE={'Não resolvido':'nao','Parcialmente resolvido':'parcial','Resolvido':'ok'};
 function renderFollowup(rows){
@@ -1584,7 +1646,11 @@ function renderFollowup(rows){
   const cont={'Não resolvido':0,'Parcialmente resolvido':0,'Resolvido':0};
   const vistos={};
   all.forEach(function(x){const k=acompKey(x.rg,x.row.marker);if(!vistos[k]){vistos[k]=1;cont[x.acomp.status]=(cont[x.acomp.status]||0)+1;}});
-  document.getElementById('followupSummary').innerHTML='<span><strong>'+cont['Não resolvido']+'</strong>não resolvidos</span><span><strong>'+cont['Parcialmente resolvido']+'</strong>resolvidos parcialmente</span><span><strong>'+cont['Resolvido']+'</strong>resolvidos</span>';
+  document.getElementById('followupSummary').innerHTML=donutHTML({act:'follow',current:FOLLOW_FILTER,kpiKey:'Resolvido',kpiLabel:'resolvidos',aria:'Casos resolvidos',
+    segs:[{key:'Resolvido',label:'Resolvidos',n:cont['Resolvido'],color:'var(--st-done)'},
+          {key:'Parcialmente resolvido',label:'Resolvidos parcialmente',n:cont['Parcialmente resolvido'],color:'var(--st-mid)'},
+          {key:'Não resolvido',label:'Não resolvidos',n:cont['Não resolvido'],color:'var(--st-open)'}]});
+  const selSit=document.querySelector('#followupFilters select[data-fkey="situacao"]');if(selSit&&selSit.value!==FOLLOW_FILTER)selSit.value=FOLLOW_FILTER;
   const filtrados=all.filter(function(x){return FOLLOW_FILTER==='todos'||(FOLLOW_FILTER==='aberto'?x.acomp.status!=='Resolvido':x.acomp.status===FOLLOW_FILTER);})
     .sort(function(a,b){return b.alert.score-a.alert.score||FOLLOW_STATUS.indexOf(a.acomp.status)-FOLLOW_STATUS.indexOf(b.acomp.status);});
   const list=filtrados.slice(0,FOLLOW_N);
