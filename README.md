@@ -89,6 +89,12 @@ WhatsApp ou no e-mail conforme o problema relatado e a situação do caso (`Não
 prioridade, marco e quantidade (10/25/50/100) e prévia da mensagem ao passar o cursor. Ver
 README da produção.
 
+### Rastreio de câncer de pulmão
+
+Seção com fumantes e ex-fumantes: mensagem que pergunta idade e carga tabágica, registro das
+respostas com cálculo de maços-ano e indicação (USPSTF 2021), data da TC, Lung-RADS e conduta
+sugerida; gravado na aba `Rastreio` (`action=rastreio`, exige token). Ver README da produção.
+
 ### Visual
 
 Brasão estilizado do CBMERJ no cabeçalho (`assets/`), paleta do brasão e resumos em rosca com
