@@ -615,10 +615,10 @@ function renderKpis(rows){
     ['Participantes',unique,'identificadores únicos'],
     ['T físico',physical===null?'—':physical.toFixed(1),'referência 50'],
     ['T mental',mental===null?'—':mental.toFixed(1),'referência 50'],
-    ['Respostas dentro das janelas principais',total?quality+'%':'—',(total-within)+' de '+total+' resposta(s) permanecem separadas como “fora dos marcos” (cálculo independente do filtro)'],
-    ['Recomendação do programa',nps===null?'—':(nps>0?'+':'')+nps,(nps===null?'Sem dados':npsBand(nps)+' · n='+npsN),'Net Promoter Score (respostas de 0 a 10)']
+    ['Dentro das janelas',total?quality+'%':'—',(total-within)+' fora dos marcos · n='+total,'Respostas dentro das janelas principais: '+within+' de '+total+'. As '+(total-within)+' restantes ficam separadas como “fora dos marcos”. Cálculo sobre todas as respostas, independente do filtro de marcos.'],
+    ['Recomendação (NPS)',nps===null?'—':(nps>0?'+':'')+nps,(nps===null?'sem dados':npsBand(nps)+' · n='+npsN),'Net Promoter Score do programa (notas de 0 a 10): % de promotores (9–10) menos % de detratores (0–6).']
   ];
-  document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div>'+(x[3]?'<div class="detail">'+x[3]+'</div>':'')+'</article>';}).join('');
+  document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"'+(x[3]?' data-tip="'+esc(x[3])+'"':'')+'><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div></article>';}).join('');
   document.getElementById('npsValue').textContent=nps===null?'—':(nps>0?'+':'')+nps;
   document.getElementById('npsBand').textContent=nps===null?'Sem dados':npsBand(nps)+' · n='+npsScores(rows).length;
 }
