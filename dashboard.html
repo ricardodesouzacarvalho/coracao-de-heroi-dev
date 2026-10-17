@@ -285,10 +285,13 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <h2>Participação por marco</h2>
       <p class="panel-sub">Respostas compatíveis com o formulário longitudinal, por marco (todas as respostas, independente do filtro).</p>
       <div id="participacaoDonut"></div>
-      <h3>Tempo do formulário</h3>
-      <div id="tempoPrograma"></div>
       <h3>Respostas esperadas até hoje</h3>
       <div id="respostasEsperadas"></div>
+    </section>
+    <section class="panel">
+      <h2>Tempo do formulário</h2>
+      <p class="panel-sub">Cada militar é acompanhado por 300 dias a partir da data oficial da Inspeção. No centro, a média do tempo já percorrido; a rosca mostra em que fase do acompanhamento cada militar está hoje.</p>
+      <div id="tempoPrograma"></div>
     </section>
     <section class="panel wide" id="sendPanel">
       <h2>Controle de envio do formulário</h2>
@@ -915,14 +918,21 @@ function renderTempoPrograma(){
   if(!ts.length){el.innerHTML='<div class="empty">Sem datas de Inspeção carregadas.</div>';renderRespostasEsperadas();return;}
   const hoje=new Date();hoje.setHours(0,0,0,0);
   const ini=ts[0],fim=ts[ts.length-1]+DUR*DIA;
+  const dias=ts.map(function(t){return Math.max(Math.round((hoje-t)/DIA),0);});
   /* indicador principal: média, entre os militares, da fração já percorrida dos seus 300 dias */
-  const medio=Math.round(ts.reduce(function(a,t){return a+Math.min(Math.max((hoje-t)/DIA,0),DUR);},0)/ts.length/DUR*100);
+  const medio=Math.round(dias.reduce(function(a,d){return a+Math.min(d,DUR);},0)/dias.length/DUR*100);
   const calendario=Math.max(0,Math.min(100,Math.round((hoje-ini)/(fim-ini)*100)));
   const faltam=Math.max(0,Math.round((fim-hoje)/DIA));
-  const concluidos=ts.filter(function(t){return (hoje-t)/DIA>=DUR;}).length;
-  el.innerHTML='<div class="tempo-head" data-tip="'+esc('Média, entre os '+ts.length+' militares, da parte já percorrida dos 300 dias de acompanhamento de cada um (a partir da data oficial da Inspeção).')+'"><strong>'+medio+'%</strong><span>'+(faltam?'término previsto '+fmtData(new Date(fim))+' · faltam '+faltam+' dias':'formulário encerrado em '+fmtData(new Date(fim)))+'</span></div>'
-    +'<div class="tempo-bar" role="img" aria-label="Acompanhamento médio decorrido: '+medio+'%"><span style="width:'+medio+'%"></span></div>'
-    +'<div class="score-note">Média do acompanhamento já percorrido por militar (300 dias cada). '+concluidos+' de '+ts.length+' já completaram os 300 dias. Calendário do programa (1ª Inspeção em '+fmtData(new Date(ini))+' até a última + 300 dias): '+calendario+'%.</div>';
+  /* fase atual de cada militar no acompanhamento (janelas de análise; vãos somados à fase anterior) */
+  const fases=[{key:'Inicial',label:'Fase Inicial (0–60 dias)',min:0,max:60},{key:'90 dias',label:'Fase 90 dias (61–139)',min:61,max:139},
+    {key:'180 dias',label:'Fase 180 dias (140–229)',min:140,max:229},{key:'270 dias',label:'Fase 270 dias (230–299)',min:230,max:299}];
+  const cor=function(k){const m=MARKERS.filter(function(x){return x.key===k;})[0];return m?m.color:'#8a9097';};
+  const segs=fases.map(function(f){return {key:f.key,label:f.label,n:dias.filter(function(d){return d>=f.min&&d<=f.max;}).length,color:cor(f.key)};})
+    .concat([{key:'fim',label:'Concluíram os 300 dias',n:dias.filter(function(d){return d>=DUR;}).length,color:'#8a9097'}]);
+  el.innerHTML=donutHTML({kpiKey:'x',kpiText:medio+'%',kpiLabel:'percorrido',kpiLabel2:'em média',aria:'Tempo do formulário: acompanhamento médio percorrido',
+      segs:segs,extras:[{key:'n',label:'Militares acompanhados',n:dias.length}]})
+    +'<div class="tempo-head" style="margin-top:4px"><span>'+(faltam?'Término previsto <b>'+fmtData(new Date(fim))+'</b> · faltam <b>'+faltam+'</b> dias':'Formulário encerrado em '+fmtData(new Date(fim)))+'</span></div>'
+    +'<div class="score-note">Média do acompanhamento já percorrido por militar (300 dias cada, a partir da Inspeção). Término = última Inspeção + 300 dias. Calendário do programa (1ª Inspeção em '+fmtData(new Date(ini))+' até o término): '+calendario+'%.</div>';
   renderRespostasEsperadas();
 }
 /* Respostas esperadas até hoje: para cada militar (exceto desistentes), cada marco cuja janela de
