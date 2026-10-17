@@ -35,6 +35,8 @@
  *    A aba ENVIOS_SHEET é criada automaticamente no primeiro envio registrado.
  *    A aba ACOMPANHAMENTO_SHEET (sinais assistenciais: situação do caso e último contato) também
  *    é criada automaticamente, na primeira alteração feita pelo dashboard.
+ *    A aba RASTREIO_SHEET (rastreio de câncer de pulmão: respostas, elegibilidade, TC e Lung-RADS)
+ *    também é criada automaticamente, no primeiro registro feito pelo dashboard.
  * 7. E-mail automático a cada 3 dias (opcional): rode uma vez instalarEnvioAutomatico() pela
  *    conta que vai enviar. Para conferir sem enviar nada, rode previaEmailsAutomaticos(); para ver
  *    de qual endereço o e-mail sai, rode testeRemetente() (envia um teste só para você). Na
@@ -49,6 +51,12 @@ var ACOMPANHAMENTO_SHEET = 'Acompanhamento';
 var ACOMPANHAMENTO_CABECALHO = ['atualizado_em', 'rg_cbmerj', 'marco', 'status', 'sinais', 'ultimo_contato_em', 'canal_contato'];
 var ACOMPANHAMENTO_STATUS = ['Não resolvido', 'Parcialmente resolvido', 'Resolvido'];
 var ACOMPANHAMENTO_MARCOS = ['Inicial', '90 dias', '180 dias', '270 dias', 'Fora dos marcos'];
+// Rastreio de câncer de pulmão (fumantes e ex-fumantes): uma linha por RG.
+var RASTREIO_SHEET = 'Rastreio';
+var RASTREIO_CABECALHO = ['atualizado_em', 'rg_cbmerj', 'tabagismo', 'status', 'idade', 'cigarros_dia', 'anos_fumando',
+  'anos_sem_fumar', 'macos_ano', 'elegivel', 'motivo', 'data_tc', 'lung_rads', 'observacao', 'ultimo_contato_em', 'canal_contato'];
+var RASTREIO_STATUS = ['A contatar', 'Aguardando resposta', 'Elegível — agendar TC', 'TC agendada', 'TC realizada', 'Não elegível', 'Recusou'];
+var RASTREIO_LUNG_RADS = ['', '0', '1', '2', '3', '4A', '4B', '4X'];
 
 /* ---- E-mail automático (roda todo dia; cada militar recebe no máximo 1 contato a cada 3 dias) ---- */
 var EMAIL_PROGRAMA = 'coracaodeheroi.1polcampinho@gmail.com';
@@ -330,6 +338,107 @@ function salvarAcompanhamento_(rg, marco, status, canal, sinais) {
   }
 }
 
+/** Valida os parâmetros do rastreio. Só os campos enviados são alterados; '' limpa o campo. */
+function validarRastreio_(p) {
+  var v = {};
+  var numero = function (k, min, max) {
+    if (p[k] === undefined) return true;
+    var t = String(p[k]).trim().replace(',', '.');
+    if (t === '') { v[k] = ''; return true; }
+    var n = Number(t);
+    if (!isFinite(n) || n < min || n > max) return false;
+    v[k] = n;
+    return true;
+  };
+  if (!numero('idade', 18, 110)) return { erro: 'idade' };
+  if (!numero('cigarros_dia', 0, 200)) return { erro: 'cigarros_dia' };
+  if (!numero('anos_fumando', 0, 90)) return { erro: 'anos_fumando' };
+  if (!numero('anos_sem_fumar', 0, 90)) return { erro: 'anos_sem_fumar' };
+  if (p.status !== undefined) {
+    if (RASTREIO_STATUS.indexOf(String(p.status)) < 0) return { erro: 'status' };
+    v.status = String(p.status);
+  }
+  if (p.lung_rads !== undefined) {
+    if (RASTREIO_LUNG_RADS.indexOf(String(p.lung_rads)) < 0) return { erro: 'lung_rads' };
+    v.lung_rads = String(p.lung_rads);
+  }
+  if (p.data_tc !== undefined) {
+    var d = String(p.data_tc);
+    if (d !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return { erro: 'data_tc' };
+    v.data_tc = d;
+  }
+  if (p.canal !== undefined) {
+    var c = String(p.canal).toLowerCase();
+    if (['whatsapp', 'email'].indexOf(c) < 0) return { erro: 'canal' };
+    v.canal = c;
+  }
+  if (p.tabagismo !== undefined) v.tabagismo = String(p.tabagismo).slice(0, 40);
+  if (p.observacao !== undefined) v.observacao = String(p.observacao).replace(/[\r\n]+/g, ' ').slice(0, 300);
+  return { valores: v };
+}
+
+/** Critério de elegibilidade (USPSTF 2021): 50 a 80 anos, carga tabágica de 20 maços-ano ou mais e
+ *  fumante atual ou que parou há no máximo 15 anos. Devolve elegivel 'Sim', 'Não' ou '' (incompleto). */
+function elegibilidadeRastreio_(r) {
+  var idade = r.idade === '' ? null : Number(r.idade);
+  var macos = r.macos_ano === '' ? null : Number(r.macos_ano);
+  var atual = String(r.tabagismo || '') === 'Fumante atual';
+  var parou = r.anos_sem_fumar === '' ? null : Number(r.anos_sem_fumar);
+  var motivos = [];
+  if (idade !== null && (idade < 50 || idade > 80)) motivos.push('idade fora de 50–80 anos');
+  if (macos !== null && macos < 20) motivos.push('carga tabágica abaixo de 20 maços-ano');
+  if (!atual && parou !== null && parou > 15) motivos.push('parou de fumar há mais de 15 anos');
+  if (motivos.length) return { elegivel: 'Não', motivo: motivos.join('; ') };
+  if (idade === null || macos === null || (!atual && parou === null)) return { elegivel: '', motivo: 'dados incompletos' };
+  return { elegivel: 'Sim', motivo: '' };
+}
+
+/** Grava (ou atualiza) a linha do RG na aba de rastreio; recalcula maços-ano e elegibilidade. */
+function salvarRastreio_(rg, v) {
+  var agora = new Date().toISOString();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(RASTREIO_SHEET) || ss.insertSheet(RASTREIO_SHEET);
+    if (sh.getLastRow() === 0) sh.appendRow(RASTREIO_CABECALHO);
+    var valores = sh.getDataRange().getValues();
+    var col = {};
+    valores[0].forEach(function (h, i) { col[String(h).trim()] = i; });
+    var linha = -1;
+    for (var i = 1; i < valores.length; i++) {
+      if (normRg_(valores[i][col.rg_cbmerj]) === rg) { linha = i; break; }
+    }
+    var reg = linha > 0 ? valores[linha].slice() : RASTREIO_CABECALHO.map(function () { return ''; });
+    var obj = {};
+    RASTREIO_CABECALHO.forEach(function (k) { obj[k] = reg[col[k]] === undefined ? '' : reg[col[k]]; });
+    if (linha < 0) { obj.rg_cbmerj = rg; obj.status = 'A contatar'; }
+    ['tabagismo', 'status', 'idade', 'cigarros_dia', 'anos_fumando', 'anos_sem_fumar', 'data_tc', 'lung_rads', 'observacao']
+      .forEach(function (k) { if (v[k] !== undefined) obj[k] = v[k]; });
+    if (v.canal !== undefined) { obj.ultimo_contato_em = agora; obj.canal_contato = v.canal; }
+    obj.macos_ano = obj.cigarros_dia !== '' && obj.anos_fumando !== ''
+      ? Math.round(Number(obj.cigarros_dia) / 20 * Number(obj.anos_fumando) * 10) / 10 : '';
+    var el = elegibilidadeRastreio_(obj);
+    obj.elegivel = el.elegivel;
+    obj.motivo = el.motivo;
+    obj.atualizado_em = agora;
+    if (Object.prototype.toString.call(obj.data_tc) === '[object Date]') {
+      obj.data_tc = Utilities.formatDate(obj.data_tc, ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    }
+    RASTREIO_CABECALHO.forEach(function (k) {
+      if (col[k] === undefined) return;
+      // data da TC gravada como texto (apóstrofo) para o Sheets não converter em data com fuso
+      reg[col[k]] = k === 'data_tc' && obj.data_tc ? "'" + obj.data_tc : obj[k];
+    });
+    if (linha > 0) sh.getRange(linha + 1, 1, 1, reg.length).setValues([reg]);
+    else sh.appendRow(reg);
+    obj.ok = true;
+    return obj;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function doGet(e) {
   var action = String((e && e.parameter && e.parameter.action) || '').toLowerCase();
 
@@ -371,8 +480,19 @@ function doGet(e) {
       inspecoes: Object.keys(ref).map(function (rg) { return [rg, ref[rg]]; }),
       contatos: abaValores_(CONTATOS_SHEET),
       envios: abaValores_(ENVIOS_SHEET),
-      acompanhamento: abaValores_(ACOMPANHAMENTO_SHEET)
+      acompanhamento: abaValores_(ACOMPANHAMENTO_SHEET),
+      rastreio: abaValores_(RASTREIO_SHEET)
     });
+  }
+
+  if (action === 'rastreio') {
+    // Rastreio de câncer de pulmão: respostas do militar, situação, TC e último contato (por RG).
+    if (!tokenOk_(e)) return output_(e, { error: 'unauthorized' });
+    var rgR = normRg_(e.parameter.rg);
+    if (!rgR) return output_(e, { error: 'parametros_invalidos' });
+    var camposR = validarRastreio_(e.parameter);
+    if (camposR.erro) return output_(e, { error: 'parametros_invalidos', campo: camposR.erro });
+    return output_(e, salvarRastreio_(rgR, camposR.valores));
   }
 
   if (action === 'acompanhamento') {

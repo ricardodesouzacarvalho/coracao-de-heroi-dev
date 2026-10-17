@@ -86,6 +86,17 @@ table{border-collapse:collapse;width:100%;font-size:.76rem}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
 .send-filters{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.el{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.66rem;font-weight:700;white-space:nowrap}
+.el.sim{background:#e3f4ea;color:#1d6b3a}.el.nao{background:#ececf1;color:#4a4a55}.el.inc{background:#fff4d6;color:#7a5300}
+.rads{display:inline-block;border-radius:6px;padding:1px 6px;font-size:.66rem;font-weight:700;border:1px solid #c9ced4}
+.rastreio-edit td{background:#f8f9fa}
+.rastreio-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 14px;align-items:end}
+.rastreio-form label{display:flex;flex-direction:column;gap:3px;font-size:.68rem;font-weight:700;color:#5b636b;text-transform:uppercase;letter-spacing:.03em}
+.rastreio-form input,.rastreio-form select{font:inherit;font-size:.8rem;font-weight:400;text-transform:none;letter-spacing:0;border:1px solid #c9ced4;border-radius:8px;padding:5px 8px;background:#fff}
+.rastreio-form .preview{grid-column:1/-1;font-size:.78rem;color:var(--text)}
+.rastreio-form .acoes{grid-column:1/-1;display:flex;gap:8px}
+.btn-sm{font:inherit;font-size:.74rem;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
+.btn-sm.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 .prem-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
 .prem-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:6px 11px;font:600 .76rem inherit;cursor:pointer}
 .prem-chip i{width:11px;height:11px;border-radius:3px;display:inline-block}
@@ -292,6 +303,23 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       </div>
       <p class="score-note" id="followupNote"></p>
     </section>
+    <section class="panel wide" id="rastreioPanel">
+      <h2>Rastreio de câncer de pulmão</h2>
+      <p class="panel-sub">Fumantes e ex-fumantes do programa, pelas respostas ao formulário. Indicação da TC de tórax de baixa dose (USPSTF 2021): 50 a 80 anos, carga tabágica ≥ 20 maços-ano e fumante atual ou que parou há no máximo 15 anos. A mensagem pergunta idade e carga tabágica; registre as respostas em “Registrar” e acompanhe até a TC. Tudo fica gravado na aba Rastreio da planilha.</p>
+      <div id="rastreioSummary"></div>
+      <div class="follow-filters" id="rastreioFilters">
+        <label>Situação<select data-rkey="status"><option value="todas" selected>Todas</option></select></label>
+        <label>Tabagismo<select data-rkey="tabaco"><option value="todos" selected>Todos</option><option>Fumante atual</option><option>Ex-fumante</option></select></label>
+        <label>Mostrar<select data-rkey="n"><option>10</option><option selected>25</option><option>50</option><option>100</option></select></label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Militar</th><th>Tabagismo (formulário)</th><th>Mensagem</th><th>Respostas · indicação</th><th>Situação</th><th>Tomografia</th></tr></thead>
+          <tbody id="rastreioRows"></tbody>
+        </table>
+      </div>
+      <p class="score-note" id="rastreioNote"></p>
+    </section>
     <section class="panel wide" id="sendPanel">
       <h2>Controle de envio do formulário</h2>
       <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega. Pela coluna Observação da aba Contatos: <strong>Desistência</strong> suspende o envio; <strong>Deixou de responder</strong> mantém o envio com mensagem de resgate.</p>
@@ -340,8 +368,9 @@ let DATA=[];
 let AUDIT=[];
 /* Controle de envio: datas oficiais (RG → AAAA-MM-DD), contatos (RG → objeto) e envios
    registrados. Vêm do action=data (protegido por token); nunca ficam no repositório. */
-let CTRL={inspecoes:{},contatos:{},envios:[],acomp:{}};
+let CTRL={inspecoes:{},contatos:{},envios:[],acomp:{},rastreio:{}};
 let SEND_FILTER='pendente';
+let RASTREIO_FILTRO={status:'todas',tabaco:'todos',n:25},RASTREIO_ABERTO=null;
 let FOLLOW_FILTER='aberto',FOLLOW_PRIO='todas',FOLLOW_MARCO='todos',FOLLOW_N=25;
 let DEMO=false;
 
@@ -613,6 +642,7 @@ function render(){
   /* triagem assistencial inclui respostas repetidas (um sinal novo não pode ficar oculto) e tem
      filtros próprios de situação, prioridade, marco e quantidade, independentes dos chips de marco */
   renderFollowup(DATA);
+  renderRastreio();
   renderAudit();
   renderEnvios();
 }
@@ -1473,16 +1503,17 @@ const SEND_WINDOWS=[{key:'Inicial',ini:0,fim:60},{key:'90 dias',ini:61,fim:130},
 const POSTOS={'SD':'Sd','CB':'Cb','3 SGT':'3º Sgt','2 SGT':'2º Sgt','1 SGT':'1º Sgt','SUBTEN':'Subten','2 TEN':'2º Ten','1 TEN':'1º Ten','CAP':'Cap','MAJ':'Maj','TEN CEL':'Ten Cel','CEL':'Cel'};
 function rgKey(v){return String(v==null?'':v).replace(/\D/g,'');}
 function buildCtrl(raw){
-  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{}};
+  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{},rastreio:{}};
   (raw.inspecoes||[]).forEach(function(p){const rg=rgKey(p[0]);const d=String(p[1]||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))ctrl.inspecoes[rg]=d;});
   rowsFromSheet(raw.contatos||[]).forEach(function(c){const rg=rgKey(c.RG);if(rg)ctrl.contatos[rg]=c;});
   ctrl.envios=rowsFromSheet(raw.envios||[]).map(function(e){return {rg:rgKey(e.rg_cbmerj),marco:String(e.marco||''),canal:String(e.canal||''),quando:String(e.registrado_em||'')};});
+  rowsFromSheet(raw.rastreio||[]).forEach(function(a){const rg=rgKey(a.rg_cbmerj);if(rg)ctrl.rastreio[rg]=normRastreio(a);});
   rowsFromSheet(raw.acompanhamento||[]).forEach(function(a){const rg=rgKey(a.rg_cbmerj);if(rg)ctrl.acomp[acompKey(rg,String(a.marco||''))]={status:String(a.status||'Não resolvido'),contatoEm:String(a.ultimo_contato_em||''),canal:String(a.canal_contato||'')};});
   return ctrl;
 }
 function demoCtrl(){
   /* Militares fictícios em várias situações, só para a demonstração. */
-  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{}};
+  const ctrl={inspecoes:{},contatos:{},envios:[],acomp:{},rastreio:{}};
   const hoje=new Date();hoje.setHours(0,0,0,0);
   [5,20,58,70,100,125,135,150,200,215,232,290,305,50,226].forEach(function(dias,i){
     const rg='9'+String(i+1).padStart(4,'0');const d=new Date(hoje.getTime()-dias*86400000);
@@ -1607,7 +1638,7 @@ function renderEnvios(){
     :'Canal sugerido (contorno amarelo): e-mail quando houver e-mail válido e exclusivo; senão, WhatsApp. O registro do envio é gravado na aba Envios da planilha ao clicar no botão. Se o e-mail automático estiver ativo, quem tem e-mail recebe o convite e até 2 lembretes, com intervalo de 3 dias; esses envios aparecem aqui como “e-mail automático”.';
 }
 document.addEventListener('click',function(ev){
-  const a=ev.target.closest&&ev.target.closest('a.send-btn:not(.follow-btn)');
+  const a=ev.target.closest&&ev.target.closest('a.send-btn:not(.follow-btn):not(.rastreio-btn)');
   if(a)registrarEnvio(a.dataset.rg,a.dataset.marco,a.dataset.canal);
   const f=ev.target.closest&&ev.target.closest('#sendFilters .chip');
   if(f){SEND_FILTER=f.dataset.send;renderEnvios();}
@@ -1752,9 +1783,187 @@ function mostrarPrevia(a){
   box.style.left=left+'px';box.style.top=top+'px';
 }
 function esconderPrevia(){const box=document.getElementById('msgPreview');if(box)box.style.display='none';}
-['mouseover','focusin'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a)mostrarPrevia(a);});});
-['mouseout','focusout'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a.follow-btn[data-msg]');if(a&&!(ev.relatedTarget&&a.contains(ev.relatedTarget)))esconderPrevia();});});
+['mouseover','focusin'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a[data-msg]');if(a)mostrarPrevia(a);});});
+['mouseout','focusout'].forEach(function(t){document.addEventListener(t,function(ev){const a=ev.target.closest&&ev.target.closest('a[data-msg]');if(a&&!(ev.relatedTarget&&a.contains(ev.relatedTarget)))esconderPrevia();});});
 window.addEventListener('scroll',esconderPrevia,true);
+
+/* ---- Rastreio de câncer de pulmão (fumantes e ex-fumantes) ---- */
+const RASTREIO_STATUS=['A contatar','Aguardando resposta','Elegível — agendar TC','TC agendada','TC realizada','Não elegível','Recusou'];
+const RASTREIO_GRUPO={'A contatar':'contatar','Aguardando resposta':'andamento','Elegível — agendar TC':'andamento','TC agendada':'andamento','TC realizada':'realizada','Não elegível':'encerrado','Recusou':'encerrado'};
+function normRastreio(a){
+  const v=function(k){const x=a[k];return x===undefined||x===null?'':x;};
+  return {status:String(v('status')||'A contatar'),tabagismo:String(v('tabagismo')),idade:v('idade'),cigarros_dia:v('cigarros_dia'),anos_fumando:v('anos_fumando'),anos_sem_fumar:v('anos_sem_fumar'),
+    macos_ano:v('macos_ano'),elegivel:String(v('elegivel')),motivo:String(v('motivo')),data_tc:String(v('data_tc')).slice(0,10),lung_rads:String(v('lung_rads')),observacao:String(v('observacao')),
+    contatoEm:String(v('ultimo_contato_em')),canal:String(v('canal_contato'))};
+}
+/* Mesmo critério do servidor (USPSTF 2021). */
+function elegRastreio(r){
+  const n=function(x){return x===''||x===null||x===undefined||!isFinite(Number(x))?null:Number(x);};
+  const idade=n(r.idade),cig=n(r.cigarros_dia),anos=n(r.anos_fumando),parou=n(r.anos_sem_fumar),atual=r.tabagismo==='Fumante atual';
+  const macos=cig!==null&&anos!==null?Math.round(cig/20*anos*10)/10:null;
+  const mot=[];
+  if(idade!==null&&(idade<50||idade>80))mot.push('idade fora de 50–80 anos');
+  if(macos!==null&&macos<20)mot.push('carga tabágica abaixo de 20 maços-ano');
+  if(!atual&&parou!==null&&parou>15)mot.push('parou de fumar há mais de 15 anos');
+  if(mot.length)return {elegivel:'Não',motivo:mot.join('; '),macos:macos};
+  if(idade===null||macos===null||(!atual&&parou===null))return {elegivel:'',motivo:'dados incompletos',macos:macos};
+  return {elegivel:'Sim',motivo:'',macos:macos};
+}
+function candidatosRastreio(){
+  const porRg={};
+  DATA.forEach(function(r){
+    const rg=rgKey(r.rg_cbmerj);if(!rg)return;
+    const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'')||0;
+    const st=String(r.tabaco_status||'');
+    const x=porRg[rg]||(porRg[rg]={rg:rg,ultimo:null,ultimoT:-1,fumo:null,fumoT:-1});
+    if(t>=x.ultimoT){x.ultimo=r;x.ultimoT=t;}
+    if((st==='Fumante atual'||st==='Ex-fumante')&&t>=x.fumoT){x.fumo=r;x.fumoT=t;}
+  });
+  return Object.keys(porRg).map(function(k){return porRg[k];}).filter(function(x){return x.fumo;}).map(function(x){
+    const st=String(x.fumo.tabaco_status),tempo=String(x.fumo.tabaco_tempo_cessacao||'');
+    let triagem;
+    if(st==='Fumante atual')triagem={txt:'potencial (fumante atual)',cls:'sim'};
+    else if(tempo==='Mais de 20 anos')triagem={txt:'provavelmente fora (parou há mais de 20 anos)',cls:'nao'};
+    else if(tempo==='Mais de 10 anos')triagem={txt:'verificar (parou há 10–20 anos)',cls:'inc'};
+    else triagem={txt:'potencial (parou há menos de 10 anos)',cls:'sim'};
+    const ult=String(x.ultimo.tabaco_status||'');
+    return {rg:x.rg,tabagismo:st,tempo:tempo,triagem:triagem,divergente:ult&&ult!==st?ult:'',quando:x.fumoT,c:CTRL.contatos[x.rg]||null,
+      reg:CTRL.rastreio[x.rg]||normRastreio({status:'A contatar',tabagismo:st})};
+  });
+}
+function mensagemRastreio(c,x,canal){
+  const nome=c?tratamento(c):'';
+  const atual=x.tabagismo==='Fumante atual';
+  return 'Olá'+(nome?', '+nome:'')+'!\n\n'
+    +'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
+    +'Nas suas respostas ao nosso questionário, você contou que '+(atual?'fuma':'já fumou')+'. Por isso, queremos conversar com você sobre o rastreio de câncer de pulmão, um cuidado a mais com a sua saúde.\n\n'
+    +'O rastreio é feito com uma tomografia de tórax de baixa dose: um exame rápido, sem contraste e com pouca radiação. Ele é indicado para quem tem de 50 a 80 anos e fumou bastante ao longo da vida, mesmo que já tenha parado, e ajuda a encontrar alterações bem no início, quando as chances de tratamento são muito maiores.\n\n'
+    +'Para sabermos se o exame é indicado para você, pode nos responder '+(atual?'3':'4')+' perguntas rápidas?\n'
+    +'1. Qual é a sua idade?\n'
+    +'2. Quantos cigarros você '+(atual?'fuma':'fumava')+' por dia, em média?\n'
+    +'3. Por quantos anos você fumou, no total?\n'
+    +(atual?'':'4. Há quantos anos você parou de fumar?\n')
+    +'\nCom as suas respostas, entramos em contato para combinar os próximos passos.'
+    +(atual?' E, se você quiser ajuda para parar de fumar, também podemos ajudar: é só nos dizer.':'')+'\n\n'
+    +(canal==='email'?'É só responder este e-mail.':'É só responder esta mensagem.')+'\n\nObrigado!\nPrograma Coração de Herói';
+}
+/* Conduta sugerida pelo Lung-RADS v2022 (decisão médica). */
+function condutaLungRads(rads,dataTc){
+  const meses={'1':12,'2':12,'3':6,'4A':3}[rads];
+  if(meses&&/^\d{4}-\d{2}-\d{2}$/.test(dataTc)){const d=ymdToDate(dataTc);d.setMonth(d.getMonth()+meses);return 'próxima TC '+fmtData(d)+' ('+meses+' meses)';}
+  if(rads==='4B'||rads==='4X')return 'avaliação especializada (TC diagnóstica, PET-CT ou biópsia)';
+  if(rads==='0')return 'exame incompleto: complementar ou repetir em 1–3 meses';
+  return '';
+}
+function salvarRastreio(rg,campos){
+  const antes=CTRL.rastreio[rg]?Object.assign({},CTRL.rastreio[rg]):null;
+  const novo=Object.assign(normRastreio({status:'A contatar'}),antes||{});
+  ['status','tabagismo','idade','cigarros_dia','anos_fumando','anos_sem_fumar','data_tc','lung_rads','observacao'].forEach(function(k){if(campos[k]!==undefined)novo[k]=campos[k];});
+  if(campos.canal){novo.canal=campos.canal;novo.contatoEm=new Date().toISOString();}
+  const el=elegRastreio(novo);novo.elegivel=el.elegivel;novo.motivo=el.motivo;novo.macos_ano=el.macos===null?'':el.macos;
+  CTRL.rastreio[rg]=novo;renderRastreio();
+  if(DEMO)return;
+  const desfaz=function(msg){if(antes)CTRL.rastreio[rg]=antes;else delete CTRL.rastreio[rg];renderRastreio();alert(msg);};
+  jsonp(SCRIPT_URL,Object.assign({action:'rastreio',token:sessionStorage.getItem(TOKEN_KEY),rg:rg},campos)).then(function(r){
+    if(!r||!r.ok){desfaz('Não foi possível gravar na planilha'+(r&&r.error?' ('+r.error+(r.campo?': '+r.campo:'')+')':'')+'. Confira se o Code.gs atualizado está implantado.');return;}
+    CTRL.rastreio[rg]=normRastreio(Object.assign({},r,{ultimo_contato_em:r.ultimo_contato_em,canal_contato:r.canal_contato}));renderRastreio();
+  }).catch(function(){desfaz('Sem conexão com a planilha: a alteração não foi gravada.');});
+}
+function renderRastreio(){
+  const lista=candidatosRastreio();
+  const g={contatar:0,andamento:0,realizada:0,encerrado:0};
+  lista.forEach(function(x){g[RASTREIO_GRUPO[x.reg.status]||'contatar']++;});
+  const total=lista.length;
+  document.getElementById('rastreioSummary').innerHTML=donutHTML({kpiKey:'x',kpiText:total?Math.round((total-g.contatar)/total*100)+'%':'—',kpiLabel:'abordados',aria:'Rastreio de câncer de pulmão',
+    segs:[{key:'realizada',label:'TC realizada',n:g.realizada,color:'var(--st-done)'},{key:'andamento',label:'Em andamento (resposta, agendamento)',n:g.andamento,color:'var(--st-mid)'},
+          {key:'contatar',label:'A contatar',n:g.contatar,color:'var(--st-open)'},{key:'encerrado',label:'Não elegível ou recusou',n:g.encerrado,color:'#8a9097'}],
+    extras:[{key:'f',label:'Fumantes atuais',n:lista.filter(function(x){return x.tabagismo==='Fumante atual';}).length},{key:'e',label:'Ex-fumantes',n:lista.filter(function(x){return x.tabagismo==='Ex-fumante';}).length}]});
+  const selSt=document.querySelector('#rastreioFilters select[data-rkey="status"]');
+  if(selSt&&selSt.options.length===1)RASTREIO_STATUS.forEach(function(st){const o=document.createElement('option');o.textContent=st;selSt.appendChild(o);});
+  const ordem=function(x){return [RASTREIO_STATUS.indexOf(x.reg.status),x.triagem.cls==='nao'?1:0];};
+  const filtrados=lista.filter(function(x){return (RASTREIO_FILTRO.status==='todas'||x.reg.status===RASTREIO_FILTRO.status)&&(RASTREIO_FILTRO.tabaco==='todos'||x.tabagismo===RASTREIO_FILTRO.tabaco);})
+    .sort(function(a,b){const oa=ordem(a),ob=ordem(b);return oa[1]-ob[1]||oa[0]-ob[0]||b.quando-a.quando;});
+  const list=filtrados.slice(0,RASTREIO_FILTRO.n);
+  const canais={whatsapp:'WhatsApp',email:'e-mail'};
+  document.getElementById('rastreioRows').innerHTML=list.length?list.map(function(x){
+    const c=x.c,r=x.reg,el=elegRastreio(Object.assign({},r,{tabagismo:x.tabagismo}));
+    const nome=c?esc(tratamento(c)):'<span class="alerta">sem contato cadastrado</span>';
+    const fumo=esc(x.tabagismo)+(x.tempo?'<br><small>parou: '+esc(x.tempo.toLowerCase())+'</small>':'')+'<br><span class="el '+x.triagem.cls+'">'+esc(x.triagem.txt)+'</span>'+(x.divergente?'<br><small class="alerta">última resposta: '+esc(x.divergente)+'</small>':'');
+    let msg='—';
+    if(c&&situacaoContato(c)==='suspenso')msg='<small>Desistência: envio suspenso</small>';
+    else if(c){
+      const tel=String(c.Telefone_WhatsApp||'').replace(/\D/g,''),email=emailUnico(x.rg);
+      const mWa=mensagemRastreio(c,x,'whatsapp'),mEm=mensagemRastreio(c,x,'email');
+      const at=' data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'"';
+      msg='';
+      if(tel)msg+='<a class="send-btn wa rastreio-btn" target="_blank" rel="noopener"'+at+' data-canal="whatsapp" data-msg="'+esc(mWa)+'" href="https://wa.me/'+tel+'?text='+encodeURIComponent(mWa)+'">WhatsApp</a>';
+      if(email)msg+='<a class="send-btn mail rastreio-btn"'+at+' data-canal="email" data-msg="'+esc(mEm)+'" href="mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Programa Coração de Herói — rastreio de câncer de pulmão')+'&body='+encodeURIComponent(mEm)+'">E-mail</a>';
+      if(!msg)msg='<small>sem telefone ou e-mail</small>';
+    }
+    if(r.contatoEm){const t=Date.parse(r.contatoEm);if(Number.isFinite(t))msg+='<br><small>último contato '+fmtData(new Date(t))+(r.canal?' · '+(canais[r.canal]||esc(r.canal)):'')+'</small>';}
+    const dados=[];
+    if(r.idade!=='')dados.push(r.idade+' anos');
+    if(el.macos!==null)dados.push(String(el.macos).replace('.',',')+' maços-ano');
+    if(x.tabagismo!=='Fumante atual'&&r.anos_sem_fumar!=='')dados.push('parou há '+r.anos_sem_fumar+' anos');
+    const badge=el.elegivel==='Sim'?'<span class="el sim">indicado</span>':el.elegivel==='Não'?'<span class="el nao">não indicado</span>':'<span class="el inc">aguardando dados</span>';
+    const resp=(dados.length?esc(dados.join(' · '))+'<br>':'')+badge+(el.elegivel==='Não'?'<br><small>'+esc(el.motivo)+'</small>':'')+'<br><button type="button" class="btn-sm" data-rastreio-edit="'+esc(x.rg)+'">'+(RASTREIO_ABERTO===x.rg?'Fechar':'Registrar')+'</button>';
+    const sel='<select class="status-sel rastreio-sel" aria-label="Situação do rastreio" data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'">'+RASTREIO_STATUS.map(function(s){return '<option'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';
+    const conduta=condutaLungRads(r.lung_rads,r.data_tc);
+    const tc=r.data_tc?fmtData(ymdToDate(r.data_tc))+(r.lung_rads?' · <span class="rads">Lung-RADS '+esc(r.lung_rads)+'</span>':'')+(conduta?'<br><small>'+esc(conduta)+'</small>':''):'—';
+    let html='<tr><td>'+nome+'<br><small>RG '+esc(x.rg)+'</small></td><td>'+fumo+'</td><td>'+msg+'</td><td>'+resp+'</td><td>'+sel+'</td><td>'+tc+(r.observacao?'<br><small>'+esc(r.observacao)+'</small>':'')+'</td></tr>';
+    if(RASTREIO_ABERTO===x.rg){
+      const v=function(k){return esc(r[k]===undefined?'':r[k]);};
+      html+='<tr class="rastreio-edit"><td colspan="6"><form class="rastreio-form" data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'">'
+        +'<label>Idade<input type="number" min="18" max="110" name="idade" value="'+v('idade')+'"></label>'
+        +'<label>Cigarros por dia<input type="number" min="0" max="200" step="1" name="cigarros_dia" value="'+v('cigarros_dia')+'"></label>'
+        +'<label>Anos fumando<input type="number" min="0" max="90" step="1" name="anos_fumando" value="'+v('anos_fumando')+'"></label>'
+        +(x.tabagismo==='Fumante atual'?'':'<label>Anos sem fumar<input type="number" min="0" max="90" step="1" name="anos_sem_fumar" value="'+v('anos_sem_fumar')+'"></label>')
+        +'<label>Data da TC<input type="date" name="data_tc" value="'+v('data_tc')+'"></label>'
+        +'<label>Lung-RADS<select name="lung_rads">'+['','0','1','2','3','4A','4B','4X'].map(function(o){return '<option value="'+o+'"'+(o===r.lung_rads?' selected':'')+'>'+(o||'—')+'</option>';}).join('')+'</select></label>'
+        +'<label style="grid-column:span 2">Observação<input type="text" maxlength="300" name="observacao" value="'+v('observacao')+'"></label>'
+        +'<div class="preview" data-preview></div>'
+        +'<div class="acoes"><button type="submit" class="btn-sm primary">Salvar</button><button type="button" class="btn-sm" data-rastreio-edit="'+esc(x.rg)+'">Cancelar</button></div></form></td></tr>';
+    }
+    return html;
+  }).join(''):'<tr><td colspan="6" class="empty">'+(total?'Nenhum militar com os filtros selecionados.':'Nenhum fumante ou ex-fumante nas respostas.')+'</td></tr>';
+  const f=document.querySelector('#rastreioRows form.rastreio-form');if(f)previaRastreio(f);
+  document.getElementById('rastreioNote').textContent='Mostrando '+list.length+' de '+filtrados.length+' militar(es). Passe o cursor sobre WhatsApp ou E-mail para ver a mensagem. Ao clicar, o contato é registrado e a situação passa a “Aguardando resposta”. Ao salvar as respostas, a indicação é calculada (USPSTF 2021) e a situação é sugerida; a conduta após a TC segue o Lung-RADS v2022 e é decisão médica.';
+}
+function valoresForm(f){const o={};f.querySelectorAll('input[name],select[name]').forEach(function(i){o[i.name]=i.value.trim();});return o;}
+function previaRastreio(f){
+  const o=Object.assign(valoresForm(f),{tabagismo:f.dataset.fumo});const el=elegRastreio(o);
+  f.querySelector('[data-preview]').innerHTML='Carga tabágica: <b>'+(el.macos===null?'—':String(el.macos).replace('.',',')+' maços-ano')+'</b> · '+(el.elegivel==='Sim'?'<span class="el sim">TC de baixa dose indicada</span>':el.elegivel==='Não'?'<span class="el nao">não indicada</span> <small>'+esc(el.motivo)+'</small>':'<span class="el inc">dados incompletos</span>')
+    +(o.data_tc&&o.lung_rads?' · <small>'+esc(condutaLungRads(o.lung_rads,o.data_tc))+'</small>':'');
+}
+document.addEventListener('input',function(ev){const f=ev.target.closest&&ev.target.closest('form.rastreio-form');if(f)previaRastreio(f);});
+document.addEventListener('submit',function(ev){
+  const f=ev.target.closest&&ev.target.closest('form.rastreio-form');if(!f)return;
+  ev.preventDefault();
+  const o=valoresForm(f),rg=f.dataset.rg,atual=(CTRL.rastreio[rg]||{}).status||'A contatar';
+  o.tabagismo=f.dataset.fumo;
+  const el=elegRastreio(o);
+  /* situação sugerida a partir das respostas e do exame (a equipe pode trocar depois) */
+  let st=atual;
+  if(o.data_tc&&o.lung_rads)st='TC realizada';
+  else if(o.data_tc)st='TC agendada';
+  else if(el.elegivel==='Sim'&&['A contatar','Aguardando resposta','Não elegível'].indexOf(atual)>=0)st='Elegível — agendar TC';
+  else if(el.elegivel==='Não'&&['A contatar','Aguardando resposta','Elegível — agendar TC'].indexOf(atual)>=0)st='Não elegível';
+  o.status=st;
+  RASTREIO_ABERTO=null;
+  salvarRastreio(rg,o);
+});
+document.addEventListener('click',function(ev){
+  const e=ev.target.closest&&ev.target.closest('[data-rastreio-edit]');
+  if(e){RASTREIO_ABERTO=RASTREIO_ABERTO===e.dataset.rastreioEdit?null:e.dataset.rastreioEdit;renderRastreio();return;}
+  const a=ev.target.closest&&ev.target.closest('a.rastreio-btn');
+  if(a){const atual=(CTRL.rastreio[a.dataset.rg]||{}).status||'A contatar';const c={canal:a.dataset.canal,tabagismo:a.dataset.fumo};if(atual==='A contatar')c.status='Aguardando resposta';salvarRastreio(a.dataset.rg,c);}
+});
+document.addEventListener('change',function(ev){
+  const sel=ev.target.closest&&ev.target.closest('select.rastreio-sel');
+  if(sel){salvarRastreio(sel.dataset.rg,{status:sel.value,tabagismo:sel.dataset.fumo});return;}
+  const f=ev.target.closest&&ev.target.closest('#rastreioFilters select');
+  if(f){const k=f.dataset.rkey;RASTREIO_FILTRO[k]=k==='n'?Number(f.value)||25:f.value;renderRastreio();}
+});
 
 document.querySelectorAll('#markerFilters .chip').forEach(function(button){
   button.addEventListener('click',function(){
