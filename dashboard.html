@@ -102,6 +102,10 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 [hidden]{display:none!important}
 .tempo-bar{height:14px;background:#edf0f2;border-radius:999px;overflow:hidden;margin:6px 0 6px}
 .tempo-bar span{display:block;height:100%;background:var(--gold);border-radius:999px}
+.tempo-bar.resp span{background:var(--st-done)}
+.marco-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px;font-size:.72rem;color:var(--muted)}
+.marco-mini b{display:block;font-size:.9rem;color:var(--text);font-variant-numeric:tabular-nums}
+.marco-mini span{border-top:3px solid var(--line);padding-top:4px}
 .tempo-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .tempo-head strong{font-size:1.6rem;color:var(--brand-dark);line-height:1}
 .tempo-head span{font-size:.74rem;color:var(--muted)}
@@ -283,6 +287,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <div id="participacaoDonut"></div>
       <h3>Tempo do formulário</h3>
       <div id="tempoPrograma"></div>
+      <h3>Respostas esperadas até hoje</h3>
+      <div id="respostasEsperadas"></div>
     </section>
     <section class="panel wide" id="sendPanel">
       <h2>Controle de envio do formulário</h2>
@@ -897,22 +903,57 @@ function renderParticipation(rows){
 }
 /* Tempo do formulário: cada militar é acompanhado por 300 dias a partir da data oficial da Inspeção.
    O programa começa na primeira Inspeção e termina 300 dias depois da última. */
+function datasInspecao(){
+  let mapa=Object.assign({},CTRL.inspecoes);
+  if(!Object.keys(mapa).length)DATA.forEach(function(r){const rg=rgKey(r.rg_cbmerj),d=String(r.data_inspecao||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))mapa[rg]=d;});
+  return mapa;
+}
 function renderTempoPrograma(){
   const DUR=300,DIA=86400000;
-  let datas=Object.keys(CTRL.inspecoes).map(function(rg){return CTRL.inspecoes[rg];});
-  if(!datas.length){const vistos={};DATA.forEach(function(r){const rg=rgKey(r.rg_cbmerj),d=String(r.data_inspecao||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))vistos[rg]=d;});datas=Object.keys(vistos).map(function(k){return vistos[k];});}
-  const el=document.getElementById('tempoPrograma');
-  if(!datas.length){el.innerHTML='<div class="empty">Sem datas de Inspeção carregadas.</div>';return;}
+  const mapa=datasInspecao(),el=document.getElementById('tempoPrograma');
+  const ts=Object.keys(mapa).map(function(rg){return ymdToDate(mapa[rg]).getTime();}).sort(function(a,b){return a-b;});
+  if(!ts.length){el.innerHTML='<div class="empty">Sem datas de Inspeção carregadas.</div>';renderRespostasEsperadas();return;}
   const hoje=new Date();hoje.setHours(0,0,0,0);
-  const ts=datas.map(function(d){return ymdToDate(d).getTime();}).sort(function(a,b){return a-b;});
   const ini=ts[0],fim=ts[ts.length-1]+DUR*DIA;
-  const pct=Math.max(0,Math.min(100,Math.round((hoje-ini)/(fim-ini)*100)));
+  /* indicador principal: média, entre os militares, da fração já percorrida dos seus 300 dias */
+  const medio=Math.round(ts.reduce(function(a,t){return a+Math.min(Math.max((hoje-t)/DIA,0),DUR);},0)/ts.length/DUR*100);
+  const calendario=Math.max(0,Math.min(100,Math.round((hoje-ini)/(fim-ini)*100)));
   const faltam=Math.max(0,Math.round((fim-hoje)/DIA));
   const concluidos=ts.filter(function(t){return (hoje-t)/DIA>=DUR;}).length;
-  const medio=Math.round(ts.reduce(function(a,t){return a+Math.min(Math.max((hoje-t)/DIA,0),DUR);},0)/ts.length/DUR*100);
-  el.innerHTML='<div class="tempo-head" data-tip="'+esc('Do início (1ª Inspeção, '+fmtData(new Date(ini))+') ao término previsto (última Inspeção + 300 dias, '+fmtData(new Date(fim))+'). Média do tempo de acompanhamento já decorrido por militar: '+medio+'%.')+'"><strong>'+pct+'%</strong><span>'+(faltam?'faltam '+faltam+' dias · término previsto '+fmtData(new Date(fim)):'formulário encerrado em '+fmtData(new Date(fim)))+'</span></div>'
-    +'<div class="tempo-bar" role="img" aria-label="Tempo do formulário decorrido: '+pct+'%"><span style="width:'+pct+'%"></span></div>'
-    +'<div class="score-note">Início '+fmtData(new Date(ini))+' (1ª Inspeção) · término com 300 dias após a última Inspeção · '+concluidos+' de '+ts.length+' militar(es) já completaram os 300 dias · acompanhamento médio decorrido: '+medio+'%.</div>';
+  el.innerHTML='<div class="tempo-head" data-tip="'+esc('Média, entre os '+ts.length+' militares, da parte já percorrida dos 300 dias de acompanhamento de cada um (a partir da data oficial da Inspeção).')+'"><strong>'+medio+'%</strong><span>'+(faltam?'término previsto '+fmtData(new Date(fim))+' · faltam '+faltam+' dias':'formulário encerrado em '+fmtData(new Date(fim)))+'</span></div>'
+    +'<div class="tempo-bar" role="img" aria-label="Acompanhamento médio decorrido: '+medio+'%"><span style="width:'+medio+'%"></span></div>'
+    +'<div class="score-note">Média do acompanhamento já percorrido por militar (300 dias cada). '+concluidos+' de '+ts.length+' já completaram os 300 dias. Calendário do programa (1ª Inspeção em '+fmtData(new Date(ini))+' até a última + 300 dias): '+calendario+'%.</div>';
+  renderRespostasEsperadas();
+}
+/* Respostas esperadas até hoje: para cada militar (exceto desistentes), cada marco cuja janela de
+   análise já abriu conta como esperado; conta como recebido se houver resposta do militar no marco. */
+function renderRespostasEsperadas(){
+  const el=document.getElementById('respostasEsperadas');
+  const mapa=datasInspecao(),hoje=new Date();hoje.setHours(0,0,0,0);
+  const respondeu={};let inicioColeta=Infinity;
+  DATA.forEach(function(r){const rg=rgKey(r.rg_cbmerj);if(rg)respondeu[rg+'|'+r.marker]=true;const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'');if(Number.isFinite(t)&&t<inicioColeta)inicioColeta=t;});
+  /* marcos cuja janela fechou antes do início da coleta (1ª resposta ao formulário) não eram respondíveis */
+  const ini0=Number.isFinite(inicioColeta)?new Date(inicioColeta):null;if(ini0)ini0.setHours(0,0,0,0);
+  let antes=0;
+  const por={};SEND_WINDOWS.forEach(function(w){por[w.key]={esp:0,rec:0,fechEsp:0,fechRec:0};});
+  let esp=0,rec=0,fechEsp=0,fechRec=0,excluidos=0;
+  Object.keys(mapa).forEach(function(rg){
+    if(situacaoContato(CTRL.contatos[rg])==='suspenso'){excluidos++;return;}
+    const dias=Math.round((hoje-ymdToDate(mapa[rg]))/86400000);
+    SEND_WINDOWS.forEach(function(w){
+      if(dias<w.ini)return;
+      if(ini0&&ymdToDate(mapa[rg]).getTime()+w.fim*86400000<ini0.getTime()){antes++;return;}
+      const ok=Boolean(respondeu[rg+'|'+w.key]);
+      esp++;por[w.key].esp++;if(ok){rec++;por[w.key].rec++;}
+      if(dias>w.fim){fechEsp++;por[w.key].fechEsp++;if(ok){fechRec++;por[w.key].fechRec++;}}
+    });
+  });
+  if(!esp){el.innerHTML='<div class="empty">Nenhuma janela de resposta aberta ainda.</div>';return;}
+  const pct=Math.round(rec/esp*100),pctF=fechEsp?Math.round(fechRec/fechEsp*100):null;
+  el.innerHTML='<div class="tempo-head" data-tip="'+esc('Respostas recebidas ÷ respostas esperadas: cada marco cuja janela de análise já abriu (Inicial 0–60, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310) conta como uma resposta esperada por militar. Não contam os marcos cuja janela fechou antes do início da coleta nem os desistentes.')+'"><strong>'+pct+'%</strong><span>'+rec+' de '+esp+' respostas esperadas</span></div>'
+    +'<div class="tempo-bar resp" role="img" aria-label="Respostas recebidas: '+pct+'% das esperadas"><span style="width:'+pct+'%"></span></div>'
+    +'<div class="marco-mini">'+SEND_WINDOWS.map(function(w){const m=MARKERS.filter(function(x){return x.key===w.key;})[0],v=por[w.key];return '<span style="border-color:'+(m?m.color:'var(--line)')+'" data-tip="'+esc(w.key+': '+v.rec+' de '+v.esp+' com janela já aberta'+(v.fechEsp?' · janelas encerradas: '+v.fechRec+' de '+v.fechEsp:''))+'"><b>'+(v.esp?Math.round(v.rec/v.esp*100)+'%':'—')+'</b>'+w.key+' · '+v.rec+'/'+v.esp+'</span>';}).join('')+'</div>'
+    +'<div class="score-note">Conta os marcos cuja janela já abriu, inclusive as que ainda estão abertas.'+(pctF===null?'':' Só janelas já encerradas: '+pctF+'% ('+fechRec+' de '+fechEsp+').')+(antes?' '+antes+' marco(s) com janela encerrada antes do início da coleta ('+fmtData(ini0)+') fora da conta.':'')+(excluidos?' '+excluidos+' desistente(s) fora da conta.':'')+'</div>';
 }
 
 function pairedDeltas(){
