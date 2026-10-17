@@ -97,6 +97,14 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .rastreio-form .acoes{grid-column:1/-1;display:flex;gap:8px}
 .btn-sm{font:inherit;font-size:.74rem;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
 .btn-sm.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 8px}
+.toggle-row h3{margin:0}
+[hidden]{display:none!important}
+.tempo-bar{height:14px;background:#edf0f2;border-radius:999px;overflow:hidden;margin:6px 0 6px}
+.tempo-bar span{display:block;height:100%;background:var(--gold);border-radius:999px}
+.tempo-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.tempo-head strong{font-size:1.6rem;color:var(--brand-dark);line-height:1}
+.tempo-head span{font-size:.74rem;color:var(--muted)}
 .prem-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
 .prem-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:6px 11px;font:600 .76rem inherit;cursor:pointer}
 .prem-chip i{width:11px;height:11px;border-radius:3px;display:inline-block}
@@ -213,8 +221,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <p class="score-note">T-scores estimados pela tabela de conversão do escore bruto. A redação local dos itens 1, 2 e 6 deve ser validada antes de comparações externas definitivas. O eixo horizontal representa o tempo (dias desde a Inspeção). Janelas de análise: Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220 e 270 dias 230–310. Com o chip “Fora dos marcos” ligado, cada resposta fora das janelas aparece como ponto avulso no seu dia real, sem alterar a linha. Passe o cursor sobre um marcador para ver o n e o T-score.</p>
       <h3>Evolução pareada por participante</h3>
       <div id="pairedDeltas"></div>
-      <h3>Comparação independente entre marcos</h3>
-      <div id="independentStats"></div>
+      <div class="toggle-row"><h3>Comparação independente entre marcos</h3><button type="button" class="chip" id="toggleIndependent" aria-expanded="false" aria-controls="independentStats">Mostrar</button></div>
+      <div id="independentStats" hidden></div>
     </section>
 
     <section class="panel">
@@ -271,9 +279,29 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 
     <section class="panel">
       <h2>Participação por marco</h2>
-      <p class="panel-sub">Quantidade de respostas compatíveis com o formulário longitudinal.</p>
-      <div class="marker-counts" id="markerCounts"></div>
-      <div id="windowQuality" style="margin-top:16px"></div>
+      <p class="panel-sub">Respostas compatíveis com o formulário longitudinal, por marco (todas as respostas, independente do filtro).</p>
+      <div id="participacaoDonut"></div>
+      <h3>Tempo do formulário</h3>
+      <div id="tempoPrograma"></div>
+    </section>
+    <section class="panel wide" id="sendPanel">
+      <h2>Controle de envio do formulário</h2>
+      <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega. Pela coluna Observação da aba Contatos: <strong>Desistência</strong> suspende o envio; <strong>Deixou de responder</strong> mantém o envio com mensagem de resgate.</p>
+      <div class="send-summary" id="sendSummary"></div>
+      <div class="send-filters" id="sendFilters">
+        <button type="button" class="chip" data-send="pendente" aria-pressed="true">Pendentes</button>
+        <button type="button" class="chip" data-send="enviado" aria-pressed="false">Enviados, sem resposta</button>
+        <button type="button" class="chip" data-send="respondido" aria-pressed="false">Respondidos</button>
+        <button type="button" class="chip" data-send="proximo" aria-pressed="false">Janela abre em até 14 dias</button>
+        <button type="button" class="chip" data-send="suspenso" aria-pressed="false">Suspensos (desistência)</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Militar</th><th>Marco · prazo</th><th>Situação</th><th>Enviar</th><th>Observações</th></tr></thead>
+          <tbody id="sendRows"></tbody>
+        </table>
+      </div>
+      <p class="score-note" id="sendNote"></p>
     </section>
 
     <section class="panel wide">
@@ -319,25 +347,6 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
         </table>
       </div>
       <p class="score-note" id="rastreioNote"></p>
-    </section>
-    <section class="panel wide" id="sendPanel">
-      <h2>Controle de envio do formulário</h2>
-      <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega. Pela coluna Observação da aba Contatos: <strong>Desistência</strong> suspende o envio; <strong>Deixou de responder</strong> mantém o envio com mensagem de resgate.</p>
-      <div class="send-summary" id="sendSummary"></div>
-      <div class="send-filters" id="sendFilters">
-        <button type="button" class="chip" data-send="pendente" aria-pressed="true">Pendentes</button>
-        <button type="button" class="chip" data-send="enviado" aria-pressed="false">Enviados, sem resposta</button>
-        <button type="button" class="chip" data-send="respondido" aria-pressed="false">Respondidos</button>
-        <button type="button" class="chip" data-send="proximo" aria-pressed="false">Janela abre em até 14 dias</button>
-        <button type="button" class="chip" data-send="suspenso" aria-pressed="false">Suspensos (desistência)</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Militar</th><th>Marco · prazo</th><th>Situação</th><th>Enviar</th><th>Observações</th></tr></thead>
-          <tbody id="sendRows"></tbody>
-        </table>
-      </div>
-      <p class="score-note" id="sendNote"></p>
     </section>
     <section class="panel wide" id="auditPanel">
       <h2>Auditoria · RGs fora do programa</h2>
@@ -877,11 +886,33 @@ function renderNps(rows){
 }
 
 function renderParticipation(rows){
-  document.getElementById('markerCounts').innerHTML=MARKERS.map(function(m){const n=rows.filter(function(r){return r.marker===m.key;}).length;return '<div class="marker-count" style="border-color:'+m.color+'"><strong>'+n+'</strong><span>'+m.label+'</span></div>';}).join('');
-  /* Qualidade de aplicação calculada sobre TODAS as respostas compatíveis (DATA), independente do filtro,
-     para que respostas fora dos marcos não fiquem invisíveis quando o chip correspondente está desligado. */
-  const total=DATA.length,within=DATA.filter(function(r){return r.marker!=='Fora dos marcos';}).length,quality=total?Math.round(within/total*100):0;
-  document.getElementById('windowQuality').innerHTML='<div class="bar-row"><div class="bar-label">Dentro das janelas principais</div><div class="bar-track"><div class="bar-fill" style="width:'+quality+'%;background:var(--green)"></div></div><div class="bar-value">'+quality+'%</div></div><div class="score-note">'+(total-within)+' de '+total+' resposta(s) permanecem separadas como “fora dos marcos” (cálculo independente do filtro).</div>';
+  /* Rosca sobre TODAS as respostas compatíveis (DATA), independente do filtro, para que respostas
+     fora dos marcos não fiquem invisíveis quando o chip correspondente está desligado. */
+  const total=DATA.length,within=DATA.filter(function(r){return r.marker!=='Fora dos marcos';}).length;
+  document.getElementById('participacaoDonut').innerHTML=donutHTML({kpiKey:'x',kpiText:total?Math.round(within/total*100)+'%':'—',kpiLabel:'nas janelas',aria:'Respostas por marco',
+    segs:MARKERS.map(function(m){return {key:m.key,label:m.label,n:DATA.filter(function(r){return r.marker===m.key;}).length,color:m.color};})
+      .concat([{key:'fora',label:'Fora dos marcos',n:total-within,color:'#8a9097'}]),
+    extras:[{key:'t',label:'Respostas no total',n:total}]});
+  renderTempoPrograma();
+}
+/* Tempo do formulário: cada militar é acompanhado por 300 dias a partir da data oficial da Inspeção.
+   O programa começa na primeira Inspeção e termina 300 dias depois da última. */
+function renderTempoPrograma(){
+  const DUR=300,DIA=86400000;
+  let datas=Object.keys(CTRL.inspecoes).map(function(rg){return CTRL.inspecoes[rg];});
+  if(!datas.length){const vistos={};DATA.forEach(function(r){const rg=rgKey(r.rg_cbmerj),d=String(r.data_inspecao||'').slice(0,10);if(rg&&/^\d{4}-\d{2}-\d{2}$/.test(d))vistos[rg]=d;});datas=Object.keys(vistos).map(function(k){return vistos[k];});}
+  const el=document.getElementById('tempoPrograma');
+  if(!datas.length){el.innerHTML='<div class="empty">Sem datas de Inspeção carregadas.</div>';return;}
+  const hoje=new Date();hoje.setHours(0,0,0,0);
+  const ts=datas.map(function(d){return ymdToDate(d).getTime();}).sort(function(a,b){return a-b;});
+  const ini=ts[0],fim=ts[ts.length-1]+DUR*DIA;
+  const pct=Math.max(0,Math.min(100,Math.round((hoje-ini)/(fim-ini)*100)));
+  const faltam=Math.max(0,Math.round((fim-hoje)/DIA));
+  const concluidos=ts.filter(function(t){return (hoje-t)/DIA>=DUR;}).length;
+  const medio=Math.round(ts.reduce(function(a,t){return a+Math.min(Math.max((hoje-t)/DIA,0),DUR);},0)/ts.length/DUR*100);
+  el.innerHTML='<div class="tempo-head" data-tip="'+esc('Do início (1ª Inspeção, '+fmtData(new Date(ini))+') ao término previsto (última Inspeção + 300 dias, '+fmtData(new Date(fim))+'). Média do tempo de acompanhamento já decorrido por militar: '+medio+'%.')+'"><strong>'+pct+'%</strong><span>'+(faltam?'faltam '+faltam+' dias · término previsto '+fmtData(new Date(fim)):'formulário encerrado em '+fmtData(new Date(fim)))+'</span></div>'
+    +'<div class="tempo-bar" role="img" aria-label="Tempo do formulário decorrido: '+pct+'%"><span style="width:'+pct+'%"></span></div>'
+    +'<div class="score-note">Início '+fmtData(new Date(ini))+' (1ª Inspeção) · término com 300 dias após a última Inspeção · '+concluidos+' de '+ts.length+' militar(es) já completaram os 300 dias · acompanhamento médio decorrido: '+medio+'%.</div>';
 }
 
 function pairedDeltas(){
@@ -1770,6 +1801,12 @@ document.addEventListener('mouseover',function(ev){
   if(!radar)return;
   if(pc){radar.classList.add('hl');radar.querySelectorAll('.serie').forEach(function(g){g.classList.toggle('on',g.dataset.marker===pc.dataset.prem);});}
   else if(!(ev.target.closest&&ev.target.closest('#premRadar')))radar.classList.remove('hl');
+});
+document.addEventListener('click',function(ev){
+  const t=ev.target.closest&&ev.target.closest('#toggleIndependent');
+  if(!t)return;
+  const box=document.getElementById('independentStats'),abrir=box.hidden;
+  box.hidden=!abrir;t.setAttribute('aria-expanded',String(abrir));t.setAttribute('aria-pressed',String(abrir));t.textContent=abrir?'Ocultar':'Mostrar';
 });
 /* Prévia da mensagem ao passar o cursor (ou focar pelo teclado) no botão de contato. */
 function mostrarPrevia(a){
