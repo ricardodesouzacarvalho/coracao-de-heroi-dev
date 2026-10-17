@@ -13,7 +13,7 @@
   --blue:#1d5c96;--green:#287a4d;--orange:#b45f18;--danger:#b42318;--gray:#78828c;
   /* estados (rosca): em aberto · em andamento · concluído — validados (CVD e visão normal) */
   --st-open:#a51d1d;--st-mid:#c9962b;--st-done:#2e7d4f;
-  --m0:#1d5c96;--m90:#b8890b;--m180:#b42318;--m270:#671014;--mout:#78828c;
+  --m0:#1d5c96;--m90:#b8890b;--m180:#b42318;--m270:#7a3e9d;--mout:#78828c;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",Arial,sans-serif}
@@ -86,6 +86,21 @@ table{border-collapse:collapse;width:100%;font-size:.76rem}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
 .send-filters{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.prem-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
+.prem-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);padding:6px 11px;font:600 .76rem inherit;cursor:pointer}
+.prem-chip i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.prem-chip b{font-variant-numeric:tabular-nums}
+.prem-chip[aria-pressed="false"]{color:var(--muted);background:#f4f5f6}
+.prem-chip[aria-pressed="false"] i{background:transparent!important;border:2px solid #b7bdc3}
+.prem-chip:hover{border-color:var(--steel)}
+.radar .serie{transition:opacity .12s}
+.radar.hl .serie{opacity:.12}.radar.hl .serie.on{opacity:1}
+.nps-hist{display:grid;grid-template-columns:repeat(11,1fr);gap:3px;align-items:end;height:92px;margin-top:6px}
+.nps-hist div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:.62rem;color:var(--muted)}
+.nps-hist span.b{display:block;width:100%;border-radius:4px 4px 0 0}
+.nps-hist small{border-top:1px solid #c9ced4;width:100%;text-align:center;padding-top:3px}
+.nps-hist em{font-style:normal;font-variant-numeric:tabular-nums;margin-bottom:2px}
+.nps-hist small{margin-top:3px;font-size:.66rem;color:var(--text)}
 .donut-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;margin:8px 0 14px}
 .donut{width:168px;height:168px;flex:none}
 .donut .seg{cursor:pointer;transition:opacity .12s}
@@ -238,10 +253,9 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
     <section class="panel">
       <h2>Recomendação do programa</h2>
       <p class="panel-sub">Net Promoter Score e distribuição das respostas de 0 a 10.</p>
-      <div class="nps-box">
-        <div><div class="nps-number" id="npsValue">—</div><div class="nps-caption" id="npsBand">Sem dados</div></div>
-        <div style="flex:1" id="npsDistribution"></div>
-      </div>
+      <div id="npsDonut"></div>
+      <h3>Distribuição das notas (0 a 10)</h3>
+      <div id="npsDistribution"></div>
     </section>
 
     <section class="panel">
@@ -318,7 +332,7 @@ const MARKERS=[
   {key:'Inicial',label:'Inicial',color:'#1d5c96'},
   {key:'90 dias',label:'90 dias',color:'#b8890b'},
   {key:'180 dias',label:'180 dias',color:'#b42318'},
-  {key:'270 dias',label:'270 dias',color:'#671014'}
+  {key:'270 dias',label:'270 dias',color:'#7a3e9d'}
 ];
 const ACTIVE=new Set(MARKERS.map(function(m){return m.key;}));
 const TOKEN_KEY='dash_promis_chave';
@@ -587,7 +601,7 @@ function render(){
      "Fora dos marcos" (independente do chip), pois não dependem da janela temporal exata.
      Os marcos oficiais continuam obedecendo aos chips. */
   const rowsProcesso=DATA.filter(function(r){return (ACTIVE.has(r.marker)||r.marker==='Fora dos marcos')&&!r.repeat;});
-  renderKpis(rows);
+  renderKpis(rows,DATA.filter(function(r){return (ACTIVE.has(r.marker)||r.marker==='Fora dos marcos')&&!r.repeat;}));
   renderPromis();
   renderPrem(rowsProcesso);
   renderExams(rowsProcesso);
@@ -603,13 +617,13 @@ function render(){
   renderEnvios();
 }
 
-function renderKpis(rows){
+function renderKpis(rows,rowsProcesso){
   const physical=mean(rows.map(function(r){return r.physicalT;}));
   const mental=mean(rows.map(function(r){return r.mentalT;}));
   const unique=new Set(rows.map(function(r){return String(r.rg_cbmerj||'');}).filter(Boolean)).size;
   /* Janelas: sobre TODAS as respostas compatíveis (DATA), independente do filtro, como em "Participação por marco". */
   const total=DATA.length,within=DATA.filter(function(r){return r.marker!=='Fora dos marcos';}).length,quality=total?Math.round(within/total*100):0;
-  const nps=calcNps(rows),npsN=npsScores(rows).length;
+  const nps=calcNps(rowsProcesso),npsN=npsScores(rowsProcesso).length;
   const items=[
     ['Respostas',rows.length,'filtro atual'],
     ['Participantes',unique,'identificadores únicos'],
@@ -619,8 +633,6 @@ function renderKpis(rows){
     ['Recomendação (NPS)',nps===null?'—':(nps>0?'+':'')+nps,(nps===null?'sem dados':npsBand(nps)+' · n='+npsN),'Net Promoter Score do programa (notas de 0 a 10): % de promotores (9–10) menos % de detratores (0–6).']
   ];
   document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"'+(x[3]?' data-tip="'+esc(x[3])+'"':'')+'><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div></article>';}).join('');
-  document.getElementById('npsValue').textContent=nps===null?'—':(nps>0?'+':'')+nps;
-  document.getElementById('npsBand').textContent=nps===null?'Sem dados':npsBand(nps)+' · n='+npsScores(rows).length;
 }
 
 function renderPromis(){
@@ -689,10 +701,12 @@ function renderPromis(){
 }
 
 function premValues(rows){return PREM_DIMS.map(function(dim){return mean(rows.map(dim.fn));});}
+let PREM_OFF=new Set();
 function renderPrem(rows){
-  const series=MARKERS.filter(function(m){return ACTIVE.has(m.key);}).map(function(m){const mr=markerData(m.key);return {marker:m,values:premValues(mr),count:mr.length};}).filter(function(s){return s.count>0;});
+  const all=MARKERS.filter(function(m){return ACTIVE.has(m.key);}).map(function(m){const mr=markerData(m.key);return {marker:m,values:premValues(mr),count:mr.length};}).filter(function(s){return s.count>0;});
+  const series=all.filter(function(s){return !PREM_OFF.has(s.marker.key);});
   const W=500,H=380,cx=250,cy=184,R=125,N=PREM_DIMS.length;
-  let svg='<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Radar das dimensões PREMs por marco">';
+  let svg='<svg class="chart-svg radar" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Radar das dimensões PREMs por marco">';
   [25,50,75,100].forEach(function(level){let pts='';for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N;pts+=(cx+R*level/100*Math.cos(a))+','+(cy+R*level/100*Math.sin(a))+' ';}svg+='<polygon points="'+pts+'" fill="none" stroke="#dfe3e8" stroke-width="1"/>';});
   for(let i=0;i<N;i++){const a=-Math.PI/2+i*2*Math.PI/N,x=cx+R*Math.cos(a),yy=cy+R*Math.sin(a),lx=cx+(R+42)*Math.cos(a),ly=cy+(R+30)*Math.sin(a);svg+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+yy+'" stroke="#dfe3e8"/><text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="10.5" fill="#4b5158">'+PREM_DIMS[i].label+'</text>';}
   series.forEach(function(s){
@@ -703,11 +717,23 @@ function renderPrem(rows){
       pts+=(cx+R*f*Math.cos(a))+','+(cy+R*f*Math.sin(a))+' ';
     });
     s.missing=missing;
-    if(pts)svg+='<polygon points="'+pts+'" fill="'+s.marker.color+'22" stroke="'+s.marker.color+'" stroke-width="2.5"/>';
+    let g='<g class="serie" data-marker="'+esc(s.marker.key)+'">';
+    if(pts)g+='<polygon points="'+pts+'" fill="'+s.marker.color+'1f" stroke="'+s.marker.color+'" stroke-width="2.5" stroke-linejoin="round"/>';
+    s.values.forEach(function(v,i){
+      if(v===null)return;
+      const a=-Math.PI/2+i*2*Math.PI/N,f=v/100,x=cx+R*f*Math.cos(a),y=cy+R*f*Math.sin(a);
+      g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="4.5" fill="'+s.marker.color+'" stroke="#fff" stroke-width="2" data-tip="'+esc(s.marker.label+' · '+PREM_DIMS[i].label+': '+Math.round(v)+'% (n='+s.count+')')+'"/>';
+      if(series.length===1)g+='<text x="'+(cx+(R*f+16)*Math.cos(a)).toFixed(1)+'" y="'+(cy+(R*f+16)*Math.sin(a)+4).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#23272b">'+Math.round(v)+'</text>';
+    });
+    svg+=g+'</g>';
   });
   svg+='</svg>';
-  document.getElementById('premRadar').innerHTML=series.length?svg:'<div class="empty">Sem respostas PREM nos marcos selecionados.</div>';
-  document.getElementById('premLegend').innerHTML=series.map(function(s){const valid=s.values.filter(function(v){return v!==null;});const overall=valid.length?mean(valid):null;return '<span><i style="background:'+s.marker.color+'"></i>'+s.marker.label+': '+(overall===null?'—':Math.round(overall)+'%')+(s.missing&&s.missing.length?' · N/D: '+s.missing.join(', '):'')+'</span>';}).join('');
+  document.getElementById('premRadar').innerHTML=series.length?svg:'<div class="empty">'+(all.length?'Ative ao menos um marco abaixo.':'Sem respostas PREM nos marcos selecionados.')+'</div>';
+  /* chips: ligam/desligam a camada de cada marco; ao passar o cursor, destacam a camada no radar */
+  document.getElementById('premLegend').className='prem-chips';
+  document.getElementById('premLegend').innerHTML=all.map(function(s){const valid=s.values.filter(function(v){return v!==null;});const overall=valid.length?mean(valid):null;const on=!PREM_OFF.has(s.marker.key);
+    return '<button type="button" class="prem-chip" data-prem="'+esc(s.marker.key)+'" aria-pressed="'+on+'" title="'+esc((on?'Ocultar':'Mostrar')+' '+s.marker.label+' no radar'+(s.missing&&s.missing.length?' · sem dados: '+s.missing.join(', '):''))+'"><i style="background:'+s.marker.color+'"></i>'+s.marker.label+': <b>'+(overall===null?'—':Math.round(overall)+'%')+'</b></button>';}).join('')
+    +(all.length>1?'<span class="score-note" style="flex-basis:100%;margin:2px 0 0">Clique para mostrar ou ocultar cada marco; com um só marco ativo, os valores aparecem no gráfico.</span>':'');
   const professionals=[
     ['Nutricionista','prem_experiencia_nutricionista'],
     ['Clínico','prem_experiencia_clinico'],
@@ -808,14 +834,16 @@ function calcNps(rows){
 }
 function npsBand(n){if(n>=75)return 'Excelência';if(n>=50)return 'Muito bom';if(n>=0)return 'Aperfeiçoar';return 'Crítico';}
 function renderNps(rows){
-  const scored=npsScores(rows),total=scored.length;
-  function share(fn){return total?Math.round(scored.filter(fn).length/total*100):0;}
-  const bands=[
-    {label:'Promotores',value:share(function(n){return n>=9;}),suffix:'%'},
-    {label:'Neutros',value:share(function(n){return n>=7&&n<=8;}),suffix:'%'},
-    {label:'Detratores',value:share(function(n){return n<=6;}),suffix:'%'}
-  ];
-  renderBars('npsDistribution',bands,100);
+  const scored=npsScores(rows),total=scored.length,nps=calcNps(rows);
+  const prom=scored.filter(function(n){return n>=9;}).length,neu=scored.filter(function(n){return n>=7&&n<=8;}).length,det=scored.filter(function(n){return n<=6;}).length;
+  document.getElementById('npsDonut').innerHTML=donutHTML({kpiKey:'prom',kpiText:nps===null?'—':(nps>0?'+':'')+nps,kpiLabel:'NPS',kpiLabel2:nps===null?'sem dados':npsBand(nps),aria:'Net Promoter Score',
+    segs:[{key:'prom',label:'Promotores (9–10)',n:prom,color:'var(--st-done)'},{key:'neu',label:'Neutros (7–8)',n:neu,color:'#8a9097'},{key:'det',label:'Detratores (0–6)',n:det,color:'var(--st-open)'}],
+    extras:[{key:'n',label:'Respostas com nota',n:total}]});
+  /* histograma das notas 0–10, na cor da faixa (detrator, neutro, promotor) */
+  const cont=[];for(let i=0;i<=10;i++)cont.push(scored.filter(function(n){return n===i;}).length);
+  const max=Math.max.apply(null,cont.concat([1]));
+  const cor=function(i){return i>=9?'var(--st-done)':i>=7?'#8a9097':'var(--st-open)';};
+  document.getElementById('npsDistribution').innerHTML=total?'<div class="nps-hist" role="img" aria-label="Distribuição das notas de 0 a 10">'+cont.map(function(c,i){return '<div data-tip="'+esc('Nota '+i+': '+c+' resposta(s) ('+(total?Math.round(c/total*100):0)+'%)')+'"><em>'+(c||'')+'</em><span class="b" style="height:'+(c?Math.max(c/max*70,3):0)+'px;background:'+cor(i)+'"></span><small>'+i+'</small></div>';}).join('')+'</div>':'<div class="empty">Sem notas no filtro atual.</div>';
 }
 
 function renderParticipation(rows){
@@ -1611,21 +1639,23 @@ function donutHTML(o){
   o.segs.forEach(function(x){
     if(!x.n)return;
     const len=x.n/total*C,vis=Math.max(len-GAP,0.5);
-    arcs+='<circle class="seg" data-act="'+o.act+'" data-val="'+esc(x.key)+'" data-tip="'+esc(x.label+': '+x.n+' de '+total+' ('+pctOf(x.n)+'%)')+'" cx="80" cy="80" r="'+R+'" fill="none" stroke="'+x.color+'" stroke-width="22" stroke-dasharray="'+vis.toFixed(2)+' '+(C-vis).toFixed(2)+'" stroke-dashoffset="'+(-off-GAP/2).toFixed(2)+'" transform="rotate(-90 80 80)"/>';
+    arcs+='<circle class="seg"'+(o.act?' data-act="'+o.act+'" data-val="'+esc(x.key)+'"':'')+' data-tip="'+esc(x.label+': '+x.n+' de '+total+' ('+pctOf(x.n)+'%)')+'" cx="80" cy="80" r="'+R+'" fill="none" stroke="'+x.color+'" stroke-width="22" stroke-dasharray="'+vis.toFixed(2)+' '+(C-vis).toFixed(2)+'" stroke-dashoffset="'+(-off-GAP/2).toFixed(2)+'" transform="rotate(-90 80 80)"/>';
     off+=len;
   });
   if(!total)arcs='<circle cx="80" cy="80" r="'+R+'" fill="none" stroke="#e6e9ec" stroke-width="22"/>';
   const kpi=o.segs.filter(function(x){return x.key===o.kpiKey;})[0];
-  const kpiTxt=total?pctOf(kpi.n)+'%':'—';
+  const kpiTxt=o.kpiText!==undefined?o.kpiText:(total?pctOf(kpi.n)+'%':'—');
   const svg='<svg class="donut" viewBox="0 0 160 160" role="img" aria-label="'+esc(o.aria+': '+kpiTxt+'. '+o.segs.map(function(x){return x.label+' '+x.n;}).join(', '))+'">'+arcs
     +'<text x="80" y="'+(o.kpiLabel2?78:82)+'" text-anchor="middle" class="kpi-num">'+kpiTxt+'</text><text x="80" y="'+(o.kpiLabel2?97:102)+'" text-anchor="middle" class="kpi-lbl">'+esc(o.kpiLabel)+'</text>'
     +(o.kpiLabel2?'<text x="80" y="110" text-anchor="middle" class="kpi-lbl">'+esc(o.kpiLabel2)+'</text>':'')+'</svg>';
-  const item=function(x,extra){return '<button type="button" data-act="'+o.act+'" data-val="'+esc(x.key)+'" aria-pressed="'+String(o.current===x.key)+'"><i'+(extra?'':' style="background:'+x.color+'"')+'></i><span>'+esc(x.label)+'</span><span class="n">'+x.n+'</span><span class="p">'+(extra?'':pctOf(x.n)+'%')+'</span></button>';};
+  const item=function(x,extra){return '<button type="button"'+(o.act?' data-act="'+o.act+'" data-val="'+esc(x.key)+'" aria-pressed="'+String(o.current===x.key)+'"':' tabindex="-1" style="cursor:default"')+'><i'+(extra?'':' style="background:'+x.color+'"')+'></i><span>'+esc(x.label)+'</span><span class="n">'+x.n+'</span><span class="p">'+(extra?'':pctOf(x.n)+'%')+'</span></button>';};
   const legenda='<div class="donut-legend">'+o.segs.map(function(x){return item(x,false);}).join('')
     +(o.extras&&o.extras.length?'<div class="extra">'+o.extras.map(function(x){return item(x,true);}).join('')+'</div>':'')+'</div>';
   return '<div class="donut-wrap">'+svg+legenda+'</div>';
 }
 document.addEventListener('click',function(ev){
+  const pc=ev.target.closest&&ev.target.closest('.prem-chip');
+  if(pc){const k=pc.dataset.prem;if(PREM_OFF.has(k))PREM_OFF.delete(k);else PREM_OFF.add(k);renderPrem(DATA.filter(function(r){return (ACTIVE.has(r.marker)||r.marker==='Fora dos marcos')&&!r.repeat;}));return;}
   const el=ev.target.closest&&ev.target.closest('[data-act]');
   if(!el)return;
   if(el.dataset.act==='follow'){FOLLOW_FILTER=el.dataset.val;renderFollowup(FOLLOW_ROWS);}
@@ -1703,6 +1733,12 @@ document.addEventListener('change',function(ev){
   const v=f.value,k=f.dataset.fkey;
   if(k==='situacao')FOLLOW_FILTER=v;else if(k==='prioridade')FOLLOW_PRIO=v;else if(k==='marco')FOLLOW_MARCO=v;else FOLLOW_N=Number(v)||25;
   renderFollowup(FOLLOW_ROWS);
+});
+document.addEventListener('mouseover',function(ev){
+  const pc=ev.target.closest&&ev.target.closest('.prem-chip[aria-pressed="true"]');const radar=document.querySelector('#premRadar .radar');
+  if(!radar)return;
+  if(pc){radar.classList.add('hl');radar.querySelectorAll('.serie').forEach(function(g){g.classList.toggle('on',g.dataset.marker===pc.dataset.prem);});}
+  else if(!(ev.target.closest&&ev.target.closest('#premRadar')))radar.classList.remove('hl');
 });
 /* Prévia da mensagem ao passar o cursor (ou focar pelo teclado) no botão de contato. */
 function mostrarPrevia(a){
