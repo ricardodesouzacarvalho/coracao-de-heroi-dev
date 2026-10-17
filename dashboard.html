@@ -607,20 +607,18 @@ function renderKpis(rows){
   const physical=mean(rows.map(function(r){return r.physicalT;}));
   const mental=mean(rows.map(function(r){return r.mentalT;}));
   const unique=new Set(rows.map(function(r){return String(r.rg_cbmerj||'');}).filter(Boolean)).size;
-  const examRows=rows.filter(function(r){const s=String(r.prem_exames_status||'');return s!==''&&!s.startsWith('Não houve');});
-  const exams=pct(examRows,function(r){return String(r.prem_exames_status||'').startsWith('Todos concluídos');});
-  const adhRows=rows.filter(function(r){const v=String(r.contexto_medicacao_adesao||'');return v!==''&&v!=='Prefiro não responder';});
-  const adherent=pct(adhRows,function(r){return r.contexto_medicacao_adesao==='Nenhuma';});
-  const nps=calcNps(rows);
+  /* Janelas: sobre TODAS as respostas compatíveis (DATA), independente do filtro, como em "Participação por marco". */
+  const total=DATA.length,within=DATA.filter(function(r){return r.marker!=='Fora dos marcos';}).length,quality=total?Math.round(within/total*100):0;
+  const nps=calcNps(rows),npsN=npsScores(rows).length;
   const items=[
     ['Respostas',rows.length,'filtro atual'],
     ['Participantes',unique,'identificadores únicos'],
     ['T físico',physical===null?'—':physical.toFixed(1),'referência 50'],
     ['T mental',mental===null?'—':mental.toFixed(1),'referência 50'],
-    ['Exames concluídos',exams+'%','ou não necessários · n='+examRows.length],
-    ['Adesão em 7 dias',adherent+'%','nenhuma dose omitida · n='+adhRows.length]
+    ['Dentro das janelas',total?quality+'%':'—',(total-within)+' fora dos marcos · n='+total,'Respostas dentro das janelas principais: '+within+' de '+total+'. As '+(total-within)+' restantes ficam separadas como “fora dos marcos”. Cálculo sobre todas as respostas, independente do filtro de marcos.'],
+    ['Recomendação (NPS)',nps===null?'—':(nps>0?'+':'')+nps,(nps===null?'sem dados':npsBand(nps)+' · n='+npsN),'Net Promoter Score do programa (notas de 0 a 10): % de promotores (9–10) menos % de detratores (0–6).']
   ];
-  document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div></article>';}).join('');
+  document.getElementById('kpis').innerHTML=items.map(function(x){return '<article class="kpi"'+(x[3]?' data-tip="'+esc(x[3])+'"':'')+'><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="detail">'+x[2]+'</div></article>';}).join('');
   document.getElementById('npsValue').textContent=nps===null?'—':(nps>0?'+':'')+nps;
   document.getElementById('npsBand').textContent=nps===null?'Sem dados':npsBand(nps)+' · n='+npsScores(rows).length;
 }
