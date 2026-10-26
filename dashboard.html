@@ -98,6 +98,16 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .rastreio-form .acoes{grid-column:1/-1;display:flex;gap:8px}
 .btn-sm{font:inherit;font-size:.74rem;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
 .btn-sm.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.panel{position:relative}
+.panel>h2{padding-right:92px}
+.png-chip{position:absolute;top:14px;right:14px;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;font-size:.72rem;color:var(--brand-dark)}
+.png-chip svg{width:13px;height:13px;flex:none}
+.png-chip[aria-busy="true"]{opacity:.6;cursor:progress}
+.png-brand{display:flex;align-items:center;gap:10px;margin:-4px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.png-brand img{width:38px;height:38px}
+.png-brand span{display:block;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand)}
+.png-brand strong{display:block;font-size:.86rem;color:var(--ink)}
+.png-foot{margin-top:14px;padding-top:8px;border-top:1px solid var(--line);font-size:.66rem;color:var(--muted)}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 8px}
 .toggle-row h3{margin:0}
 [hidden]{display:none!important}
@@ -294,7 +304,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <p class="panel-sub">Cada militar é acompanhado por 300 dias a partir da data oficial da Inspeção. No centro, a média do tempo já percorrido; a rosca mostra em que fase do acompanhamento cada militar está hoje.</p>
       <div id="tempoPrograma"></div>
     </section>
-    <section class="panel wide" id="sendPanel">
+    <section class="panel wide" id="sendPanel" data-sensivel>
       <h2>Controle de envio do formulário</h2>
       <p class="panel-sub">Militares do programa na janela de resposta, pela data oficial da Inspeção (Inicial 0–60 dias, 90 dias 61–130, 180 dias 140–220, 270 dias 230–310). A mensagem é individualizada; o botão abre o WhatsApp ou o e-mail já preenchidos e registra o envio. A baixa é automática quando a resposta do marco chega. Pela coluna Observação da aba Contatos: <strong>Desistência</strong> suspende o envio; <strong>Deixou de responder</strong> mantém o envio com mensagem de resgate.</p>
       <div class="send-summary" id="sendSummary"></div>
@@ -314,7 +324,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       <p class="score-note" id="sendNote"></p>
     </section>
 
-    <section class="panel wide">
+    <section class="panel wide" id="followPanel" data-sensivel>
       <h2>Sinais para acompanhamento assistencial</h2>
       <p class="panel-sub">Triagem gerencial, não diagnóstica. O nome vem da aba Contatos (acesso restrito pela chave). A mensagem abre o WhatsApp ou o e-mail já preenchidos, com abertura empática e perguntas sobre cada problema; a situação do caso fica gravada na aba Acompanhamento da planilha.</p>
       <div class="send-summary" id="followupSummary"></div>
@@ -341,7 +351,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       </div>
       <p class="score-note" id="followupNote"></p>
     </section>
-    <section class="panel wide" id="rastreioPanel">
+    <section class="panel wide" id="rastreioPanel" data-sensivel>
       <h2>Rastreio de câncer de pulmão</h2>
       <p class="panel-sub">Fumantes e ex-fumantes do programa, pelas respostas ao formulário. Indicação da TC de tórax de baixa dose (USPSTF 2021): 50 a 80 anos, carga tabágica ≥ 20 maços-ano e fumante atual ou que parou há no máximo 15 anos. A mensagem pergunta idade e carga tabágica; registre as respostas em “Registrar” e acompanhe até a TC. Tudo fica gravado na aba Rastreio da planilha.</p>
       <div id="rastreioSummary"></div>
@@ -358,7 +368,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
       </div>
       <p class="score-note" id="rastreioNote"></p>
     </section>
-    <section class="panel wide" id="auditPanel">
+    <section class="panel wide" id="auditPanel" data-sensivel>
       <h2>Auditoria · RGs fora do programa</h2>
       <p class="panel-sub">Respostas com RG que não consta da lista de Inspeções do programa (provável erro de digitação ou participante não incluído). Ficam fora de todas as análises deste painel até a divergência ser resolvida. Identificadores mascarados: confira na base restrita pela data e hora de registro.</p>
       <div class="table-wrap">
@@ -2062,6 +2072,75 @@ document.querySelectorAll('#markerFilters .chip').forEach(function(button){
     if(active)ACTIVE.delete(key);else ACTIVE.add(key);
     render();
   });
+});
+
+/* Baixar card em PNG: chip em cada painel. O html2canvas fica no próprio repositório
+   (assets/vendor, licença MIT) e só é carregado no primeiro clique. A imagem leva o
+   brasão, a data e os marcos do filtro; cards com nomes/RGs pedem confirmação. */
+const PNG_ICONE='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0L4.8 6.8M8 10l3.2-3.2M2.5 11.5v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let H2C=null;
+function carregarHtml2canvas(){
+  if(window.html2canvas)return Promise.resolve(window.html2canvas);
+  if(!H2C)H2C=new Promise(function(ok,falha){
+    const s=document.createElement('script');
+    s.src='assets/vendor/html2canvas.min.js';
+    s.onload=function(){ok(window.html2canvas);};
+    s.onerror=function(){H2C=null;s.remove();falha(new Error('html2canvas'));};
+    document.head.appendChild(s);
+  });
+  return H2C;
+}
+function doisDig(n){return String(n).padStart(2,'0');}
+function nomeArquivoPng(titulo,d){
+  const slug=titulo.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  return 'coracao-de-heroi_'+slug+'_'+d.getFullYear()+'-'+doisDig(d.getMonth()+1)+'-'+doisDig(d.getDate())+'.png';
+}
+function baixarCardPng(panel,btn){
+  const titulo=panel.querySelector('h2').textContent.trim();
+  if(panel.hasAttribute('data-sensivel')&&!DEMO&&!confirm('“'+titulo+'” mostra dados identificáveis de militares (nomes, RGs ou contatos). O PNG sai do ambiente restrito do painel. Baixar mesmo assim?'))return;
+  const agora=new Date();
+  const marcos=Array.prototype.map.call(document.querySelectorAll('#markerFilters .chip[aria-pressed="true"]'),function(c){return c.textContent.trim();});
+  const rodape='Gerado em '+doisDig(agora.getDate())+'/'+doisDig(agora.getMonth()+1)+'/'+agora.getFullYear()+' '+doisDig(agora.getHours())+':'+doisDig(agora.getMinutes())+
+    ' · Marcos: '+marcos.join(', ')+(DEMO?' · Demonstração (dados fictícios)':' · Dados assistenciais — uso restrito');
+  btn.setAttribute('aria-busy','true');btn.disabled=true;
+  carregarHtml2canvas().then(function(h2c){
+    return h2c(panel,{scale:2,backgroundColor:null,logging:false,
+      ignoreElements:function(el){return el.classList&&el.classList.contains('png-chip');},
+      onclone:function(doc,el){
+        const topo=doc.createElement('div');topo.className='png-brand';
+        topo.innerHTML='<img src="assets/brasao-cbmerj.webp" alt=""><div><span>CBMERJ · 1ª Policlínica – Campinho</span><strong>Programa Coração de Herói</strong></div>';
+        el.insertBefore(topo,el.firstChild);
+        const pe=doc.createElement('div');pe.className='png-foot';pe.textContent=rodape;
+        el.appendChild(pe);
+        /* controles recolhidos não fazem sentido na imagem */
+        el.querySelectorAll('.toggle-row').forEach(function(r){
+          const alvo=r.querySelector('[aria-controls]'),bloco=alvo&&doc.getElementById(alvo.getAttribute('aria-controls'));
+          if(bloco&&bloco.hidden)r.remove();else if(alvo)alvo.remove();
+        });
+        /* espera o brasão carregar no clone, senão sai em branco */
+        const img=topo.querySelector('img');
+        return img.decode?img.decode().catch(function(){}):new Promise(function(ok){img.onload=img.onerror=ok;});
+      }});
+  }).then(function(canvas){
+    return new Promise(function(ok){canvas.toBlob(ok,'image/png');});
+  }).then(function(blob){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=nomeArquivoPng(titulo,agora);
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+  }).catch(function(){
+    alert('Não foi possível gerar o PNG deste card. Recarregue a página e tente de novo.');
+  }).then(function(){btn.removeAttribute('aria-busy');btn.disabled=false;});
+}
+document.querySelectorAll('main .panel').forEach(function(panel){
+  const h2=panel.querySelector('h2');
+  if(!h2)return;
+  const btn=document.createElement('button');
+  btn.type='button';btn.className='chip png-chip';
+  btn.title='Baixar “'+h2.textContent.trim()+'” em PNG';
+  btn.innerHTML=PNG_ICONE+'PNG';
+  btn.addEventListener('click',function(){baixarCardPng(panel,btn);});
+  panel.appendChild(btn);
 });
 
 /* Tooltip de valor absoluto ao passar o cursor sobre as barras em percentual. */
