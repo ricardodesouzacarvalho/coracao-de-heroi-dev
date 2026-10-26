@@ -7,25 +7,26 @@
 <link rel="icon" type="image/png" href="assets/brasao-cbmerj-64.png">
 <style>
 :root{
-  /* Paleta do brasão do CBMERJ: vermelho do anel, ouro da estrela e da chama, aço do campo */
-  --bg:#f3f4f5;--surface:#ffffff;--text:#23272b;--muted:#646b72;--line:#dde1e5;
-  --brand:#a51d1d;--brand-dark:#6b1414;--gold:#c9962b;--gold-ink:#8a6410;--steel:#5f666d;--steel-dark:#2b3035;--charcoal:#1f2327;
+  /* Paleta do brasão do CBMERJ: vermelho do anel e do escudo, ouro da estrela e das mangueiras, prata do campo, preto do contorno */
+  --bg:#eef0f1;--surface:#ffffff;--text:#1d1f21;--muted:#5f656b;--line:#d9dcdf;
+  --brand:#b0121b;--brand-dark:#7d0b11;--brand-deep:#5c070b;--gold:#d9a521;--gold-light:#f2d03d;--gold-ink:#8a6410;
+  --silver:#c5c8cb;--silver-light:#f4f5f6;--steel:#5f666d;--ink:#141516;
   --blue:#1d5c96;--green:#287a4d;--orange:#b45f18;--danger:#b42318;--gray:#78828c;
   /* estados (rosca): em aberto · em andamento · concluído — validados (CVD e visão normal) */
-  --st-open:#a51d1d;--st-mid:#c9962b;--st-done:#2e7d4f;
+  --st-open:#b0121b;--st-mid:#c9962b;--st-done:#2e7d4f;
   --m0:#1d5c96;--m90:#b8890b;--m180:#b42318;--m270:#7a3e9d;--mout:#78828c;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",Arial,sans-serif}
-.topline{height:5px;background:linear-gradient(90deg,var(--brand) 0 33%,var(--gold) 33% 67%,var(--brand) 67%)}
-header{background:linear-gradient(135deg,var(--charcoal) 0%,var(--steel-dark) 55%,#3b4046 100%);color:#fff;padding:16px 20px;border-bottom:3px solid var(--brand)}
+.topline{height:4px;background:var(--ink)}
+header{background:radial-gradient(circle at 8% 50%,var(--brand) 0,var(--brand-dark) 45%,var(--brand-deep) 100%);color:#fff;padding:16px 20px;border-bottom:3px solid var(--gold)}
 .brand{display:flex;align-items:center;gap:14px;min-width:0}
-.brand img{width:68px;height:68px;flex:none;filter:drop-shadow(0 2px 6px rgba(0,0,0,.45))}
-.brand .org{display:block;font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold);margin-bottom:2px}
+.brand img{width:80px;height:80px;flex:none;border-radius:50%;background:var(--silver-light);padding:3px;box-shadow:0 0 0 2px var(--gold),0 4px 12px rgba(0,0,0,.45)}
+.brand .org{display:block;font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold-light);margin-bottom:2px}
 .header-inner{max-width:1240px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
 .header-inner h1{font-size:1.45rem;margin:0;font-weight:700;letter-spacing:0}
-.header-inner p{margin:4px 0 0;color:#d8dce0;font-size:.82rem}
-.source-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid #ffffff66;border-radius:999px;padding:6px 10px;font-size:.72rem;font-weight:700}
+.header-inner p{margin:4px 0 0;color:#f5e3e4;font-size:.82rem}
+.source-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid #ffffff73;background:#00000026;border-radius:999px;padding:6px 10px;font-size:.72rem;font-weight:700}
 .source-dot{width:8px;height:8px;border-radius:50%;background:#8bd6a6}
 .source-badge.demo .source-dot{background:#f4c95d}
 .toolbar{max-width:1240px;margin:0 auto;padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -39,7 +40,7 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:10px;margin-bottom:14px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:8px;padding:14px;min-width:0}
 .kpi .label{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
-.kpi .value{font-size:1.75rem;line-height:1.1;font-weight:700;color:var(--brand-dark);margin-top:5px}
+.kpi .value{font-size:1.75rem;line-height:1.1;font-weight:700;color:var(--ink);margin-top:5px}
 .kpi .detail{font-size:.72rem;color:var(--muted);margin-top:4px}
 .dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .panel{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brand);border-radius:8px;padding:18px;min-width:0}
@@ -84,7 +85,7 @@ main{max-width:1240px;margin:auto;padding:10px 20px 54px}
 .table-wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.76rem}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f7f8f9}
+th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--silver-light)}
 .send-filters{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
 .el{display:inline-block;border-radius:999px;padding:2px 8px;font-size:.66rem;font-weight:700;white-space:nowrap}
 .el.sim{background:#e3f4ea;color:#1d6b3a}.el.nao{background:#ececf1;color:#4a4a55}.el.inc{background:#fff4d6;color:#7a5300}
@@ -152,10 +153,10 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .follow-filters label{display:flex;flex-direction:column;gap:3px;font-size:.68rem;font-weight:700;color:#5b636b;text-transform:uppercase;letter-spacing:.03em}
 .follow-filters select{font:inherit;font-size:.78rem;font-weight:400;text-transform:none;letter-spacing:0;color:#1f2933;border:1px solid #c9ced4;border-radius:8px;padding:5px 8px;background:#fff;min-width:130px}
 #msgPreview{position:fixed;z-index:60;display:none;max-width:440px;max-height:70vh;overflow:auto;white-space:pre-wrap;background:#fff;color:#1f2933;border:1px solid #c9ced4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;font-size:.74rem;line-height:1.45;pointer-events:none}
-#msgPreview strong{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:#7a1f1f;margin-bottom:6px}
+#msgPreview strong{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-dark);margin-bottom:6px}
 .status-sel{font:inherit;font-size:.72rem;border-radius:8px;padding:3px 6px;border:1px solid #c9ced4;background:#fff}
 .status-sel.nao{border-color:#e3a3a3;background:#fdf0f0}.status-sel.parcial{border-color:#e6c46e;background:#fff8e6}.status-sel.ok{border-color:#8fc9a5;background:#eaf6ef}
-.auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px;text-align:center}
+.auth-gate{max-width:430px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brand);border-radius:8px;padding:28px;text-align:center}
 .auth-gate h2{color:var(--brand-dark);margin:0 0 8px;font-size:1.1rem}
 .auth-gate p{color:var(--muted);font-size:.82rem;margin:0 0 14px}
 .auth-gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:10px}
@@ -164,8 +165,8 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mu
 .auth-gate .primary{background:var(--brand);color:#fff}
 .auth-gate .ghost{background:#edf0f2;color:var(--text)}
 .auth-error{color:var(--danger);font-size:.75rem;min-height:16px;margin:0 0 10px}
-.logout{color:#e6e9ec;font-size:.7rem;text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;margin-left:8px;display:none}
-footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border-top:1px solid var(--line)}
+.logout{color:#f5e3e4;font-size:.7rem;text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;margin-left:8px;display:none}
+footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border-top:3px solid var(--brand)}
 @media(max-width:1050px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:820px){.dashboard-grid{grid-template-columns:1fr}.panel.wide{grid-column:auto}.split{grid-template-columns:1fr}.marker-counts{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){header{padding:16px 14px}.toolbar,main{padding-left:12px;padding-right:12px}.kpi-grid{grid-template-columns:repeat(2,1fr)}.kpi .value{font-size:1.45rem}.panel{padding:14px}.bar-row{grid-template-columns:minmax(90px,1.15fr) minmax(80px,1.5fr) 44px}.header-inner h1{font-size:1.2rem}}
@@ -176,7 +177,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 <header>
   <div class="header-inner">
     <div class="brand">
-      <img src="assets/brasao-cbmerj.webp" alt="Brasão do Corpo de Bombeiros Militar do Estado do Rio de Janeiro" width="68" height="68">
+      <img src="assets/brasao-cbmerj.webp" alt="Brasão do Corpo de Bombeiros Militar do Estado do Rio de Janeiro" width="80" height="80">
       <div>
         <span class="org">CBMERJ · 1ª Policlínica – Campinho</span>
         <h1>Programa Coração de Herói</h1>
@@ -199,7 +200,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
 </div>
 <main>
   <section class="auth-gate" id="authGate" style="display:none" aria-label="Acesso restrito">
-    <img src="assets/brasao-cbmerj.webp" alt="" width="72" height="72" style="display:block;margin:0 auto 8px">
+    <img src="assets/brasao-cbmerj.webp" alt="" width="96" height="96" style="display:block;margin:0 auto 10px">
     <h2>Acesso restrito</h2>
     <p>Este painel exibe dados assistenciais do programa, incluindo sinais individuais para acompanhamento. Informe a chave de acesso fornecida pela coordenação.</p>
     <p class="auth-error" id="authError"></p>
