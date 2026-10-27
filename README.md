@@ -91,7 +91,8 @@ README da produção.
 
 ### Rastreio de câncer de pulmão
 
-Seção com fumantes e ex-fumantes: mensagem que pergunta idade e carga tabágica, registro das
+Seção com fumantes e ex-fumantes: idade e carga tabágica vêm do questionário (30a–30c, com "Já respondi
+anteriormente") e a mensagem pergunta só o que faltar; registro das
 respostas com cálculo de maços-ano e indicação (USPSTF 2021), data da TC, Lung-RADS e conduta
 sugerida; gravado na aba `Rastreio` (`action=rastreio`, exige token). Ver README da produção.
 

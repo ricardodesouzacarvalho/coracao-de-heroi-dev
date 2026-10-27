@@ -353,7 +353,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:.72rem;border
     </section>
     <section class="panel wide" id="rastreioPanel" data-sensivel>
       <h2>Rastreio de câncer de pulmão</h2>
-      <p class="panel-sub">Fumantes e ex-fumantes do programa, pelas respostas ao formulário. Indicação da TC de tórax de baixa dose (USPSTF 2021): 50 a 80 anos, carga tabágica ≥ 20 maços-ano e fumante atual ou que parou há no máximo 15 anos. A mensagem pergunta idade e carga tabágica; registre as respostas em “Registrar” e acompanhe até a TC. Tudo fica gravado na aba Rastreio da planilha.</p>
+      <p class="panel-sub">Fumantes e ex-fumantes do programa, pelas respostas ao formulário. Indicação da TC de tórax de baixa dose (USPSTF 2021): 50 a 80 anos, carga tabágica ≥ 20 maços-ano e fumante atual ou que parou há no máximo 15 anos. Idade, cigarros por dia e anos fumando vêm do questionário (perguntas 30a–30c) e o tempo sem fumar da pergunta 31; a mensagem pergunta só o que faltar. Confirme ou corrija em “Registrar” e acompanhe até a TC. Tudo fica gravado na aba Rastreio da planilha.</p>
       <div id="rastreioSummary"></div>
       <div class="follow-filters" id="rastreioFilters">
         <label>Situação<select data-rkey="status"><option value="todas" selected>Todas</option></select></label>
@@ -533,7 +533,11 @@ function generateDemo(){
         contexto_medicacao_adesao:pick(progress>1?['Nenhuma','Nenhuma','Nenhuma','1 vez','2 a 3 vezes']:['Nenhuma','Nenhuma','1 vez','2 a 3 vezes','4 vezes ou mais'],random),
         contexto_medicacao_dificuldade:pick(['Não tive dificuldade','Não tive dificuldade','Esquecimento ou dificuldade com a rotina','Falta na farmácia ou no serviço','Dificuldade para retirar ou obter','Efeito adverso ou receio da medicação'],random),
         tabaco_status:currentSmoker?'Fumante atual':exSmoker?'Ex-fumante':'Nunca fumei',
-        tabaco_tempo_cessacao:exSmoker?pick(['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 20 anos'],random):'',
+        tabaco_tempo_cessacao:exSmoker?pick(['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 15 anos','Mais de 20 anos'],random):'',
+        /* 30a–30c sem novos sorteios, para não mudar o restante da demonstração */
+        tabaco_idade:currentSmoker||exSmoker?42+(i*7)%36:'',
+        tabaco_cigarros_dia:currentSmoker||exSmoker?[10,15,20,20,30,40][i%6]:'',
+        tabaco_anos_fumando:currentSmoker||exSmoker?Math.min(22+(i*7)%36,8+(i*5)%30):'',
         tabaco_abordagem:currentSmoker?pick(['Não fui abordado','Fui perguntado ou recebi orientação','Recebi orientação e oferta de tratamento'],random):'',
         tabaco_conduta:currentSmoker?pick(['Não houve oferta de tratamento','Não me interessei','Tive interesse, mas não iniciei'],random):'',
         nps_recomendacao:nps,
@@ -871,7 +875,7 @@ function renderMedication(rows){
   /* Ex-fumantes: tempo de cessação em ordem cronológica (não por frequência),
      percentual sobre o total de ex-fumantes que informaram o tempo. */
   const exSmokers=rows.filter(function(r){return r.tabaco_status==='Ex-fumante';});
-  const cessationOrder=['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 20 anos'];
+  const cessationOrder=['Menos de 1 ano','Mais de 1 ano','Mais de 5 anos','Mais de 10 anos','Mais de 15 anos','Mais de 20 anos'];
   const cessationCounts=countCategories(exSmokers,'tabaco_tempo_cessacao');
   const cessation=cessationOrder.map(function(label){
     const found=cessationCounts.filter(function(c){return c.label===label;})[0];
@@ -1903,10 +1907,26 @@ function elegRastreio(r){
   const mot=[];
   if(idade!==null&&(idade<50||idade>80))mot.push('idade fora de 50–80 anos');
   if(macos!==null&&macos<20)mot.push('carga tabágica abaixo de 20 maços-ano');
-  if(!atual&&parou!==null&&parou>15)mot.push('parou de fumar há mais de 15 anos');
+  /* sem o número de anos sem fumar, vale a faixa da pergunta 31 (ate15: true, false ou null) */
+  if(!atual&&(parou!==null?parou>15:r.ate15===false))mot.push('parou de fumar há mais de 15 anos');
   if(mot.length)return {elegivel:'Não',motivo:mot.join('; '),macos:macos};
-  if(idade===null||macos===null||(!atual&&parou===null))return {elegivel:'',motivo:'dados incompletos',macos:macos};
+  if(idade===null||macos===null||(!atual&&parou===null&&r.ate15!==true))return {elegivel:'',motivo:'dados incompletos',macos:macos};
   return {elegivel:'Sim',motivo:'',macos:macos};
+}
+/* Pergunta 31 em faixas. "Mais de 10 anos" só quer dizer 10 a 15 anos a partir do formulário
+   que tem a opção "Mais de 15 anos" (versão rastreio-pulmao); antes cobria 10 a 20 anos. */
+function faixaCessacao(r){
+  const t=String(r.tabaco_tempo_cessacao||'');
+  if(!t)return null;
+  if(t==='Mais de 15 anos'||t==='Mais de 20 anos')return {txt:t.toLowerCase(),ate15:false};
+  if(t==='Mais de 10 anos')return String(r.versao_formulario||'').indexOf('rastreio-pulmao')>=0?{txt:'10 a 15 anos',ate15:true}:{txt:'mais de 10 anos',ate15:null};
+  return {txt:t==='Menos de 1 ano'?'menos de 1 ano':t==='Mais de 1 ano'?'1 a 5 anos':'5 a 10 anos',ate15:true};
+}
+/* Perguntas 30a–30c. A idade é a informada mais os anos completos desde a resposta. */
+function dadosQuestionario(r,t){
+  const n=function(k,min,max){const raw=String(r[k]==null?'':r[k]).trim(),v=Number(raw.replace(',','.'));return raw!==''&&isFinite(v)&&v>=min&&v<=max?Math.round(v):null;};
+  const idade=n('tabaco_idade',18,110),passados=t>0?Math.max(0,Math.floor((Date.now()-t)/(365.25*864e5))):0;
+  return {idade:idade===null?null:idade+passados,cigarros_dia:n('tabaco_cigarros_dia',1,200),anos_fumando:n('tabaco_anos_fumando',1,90)};
 }
 function candidatosRastreio(){
   const porRg={};
@@ -1914,35 +1934,44 @@ function candidatosRastreio(){
     const rg=rgKey(r.rg_cbmerj);if(!rg)return;
     const t=Date.parse(r.registrado_em_servidor||r.carimbo_iso||'')||0;
     const st=String(r.tabaco_status||'');
-    const x=porRg[rg]||(porRg[rg]={rg:rg,ultimo:null,ultimoT:-1,fumo:null,fumoT:-1});
+    const x=porRg[rg]||(porRg[rg]={rg:rg,ultimo:null,ultimoT:-1,fumo:null,fumoT:-1,carga:null,cargaT:-1});
     if(t>=x.ultimoT){x.ultimo=r;x.ultimoT=t;}
     if((st==='Fumante atual'||st==='Ex-fumante')&&t>=x.fumoT){x.fumo=r;x.fumoT=t;}
+    /* 30a–30c: a última resposta que as trouxe (quem marcou "Já respondi anteriormente" não repete) */
+    if(['tabaco_idade','tabaco_cigarros_dia','tabaco_anos_fumando'].some(function(k){return String(r[k]==null?'':r[k]).trim()!=='';})&&t>=x.cargaT){x.carga=r;x.cargaT=t;}
   });
   return Object.keys(porRg).map(function(k){return porRg[k];}).filter(function(x){return x.fumo;}).map(function(x){
-    const st=String(x.fumo.tabaco_status),tempo=String(x.fumo.tabaco_tempo_cessacao||'');
+    const st=String(x.fumo.tabaco_status),atual=st==='Fumante atual',faixa=atual?null:faixaCessacao(x.fumo);
     let triagem;
-    if(st==='Fumante atual')triagem={txt:'potencial (fumante atual)',cls:'sim'};
-    else if(tempo==='Mais de 20 anos')triagem={txt:'provavelmente fora (parou há mais de 20 anos)',cls:'nao'};
-    else if(tempo==='Mais de 10 anos')triagem={txt:'verificar (parou há 10–20 anos)',cls:'inc'};
-    else triagem={txt:'potencial (parou há menos de 10 anos)',cls:'sim'};
+    if(atual)triagem={txt:'potencial (fumante atual)',cls:'sim'};
+    else if(faixa&&faixa.ate15===false)triagem={txt:'fora pelo tempo (parou há mais de 15 anos)',cls:'nao'};
+    else if(faixa&&faixa.ate15===null)triagem={txt:'verificar (parou há 10–20 anos)',cls:'inc'};
+    else triagem={txt:'potencial (parou há até 15 anos)',cls:'sim'};
     const ult=String(x.ultimo.tabaco_status||'');
-    return {rg:x.rg,tabagismo:st,tempo:tempo,triagem:triagem,divergente:ult&&ult!==st?ult:'',quando:x.fumoT,c:CTRL.contatos[x.rg]||null,
-      reg:CTRL.rastreio[x.rg]||normRastreio({status:'A contatar',tabagismo:st})};
+    const reg=CTRL.rastreio[x.rg]||normRastreio({status:'A contatar',tabagismo:st});
+    /* o registrado pela equipe (aba Rastreio) prevalece; o que faltar vem do questionário */
+    const q=x.carga?dadosQuestionario(x.carga,x.cargaT):{idade:null,cigarros_dia:null,anos_fumando:null},ef=Object.assign({},reg,{tabagismo:st,ate15:faixa?faixa.ate15:null}),doQuest=[];
+    ['idade','cigarros_dia','anos_fumando'].forEach(function(k){if(String(reg[k])===''&&q[k]!==null){ef[k]=q[k];doQuest.push(k);}});
+    return {rg:x.rg,tabagismo:st,faixa:faixa,triagem:triagem,divergente:ult&&ult!==st?ult:'',quando:x.fumoT,c:CTRL.contatos[x.rg]||null,
+      reg:reg,ef:ef,doQuest:doQuest,el:elegRastreio(ef)};
   });
 }
 function mensagemRastreio(c,x,canal){
   const nome=c?tratamento(c):'';
-  const atual=x.tabagismo==='Fumante atual';
+  const atual=x.tabagismo==='Fumante atual',e=x.ef,vazio=function(k){return e[k]===''||e[k]===null||e[k]===undefined;};
+  const faltam=[];
+  if(vazio('idade'))faltam.push('Qual é a sua idade?');
+  if(vazio('cigarros_dia'))faltam.push('Quantos cigarros você '+(atual?'fuma':'fumava')+' por dia, em média?');
+  if(vazio('anos_fumando'))faltam.push('Por quantos anos você fumou, no total?');
+  if(!atual&&vazio('anos_sem_fumar')&&e.ate15!==true&&e.ate15!==false)faltam.push('Há quantos anos você parou de fumar?');
   return 'Olá'+(nome?', '+nome:'')+'!\n\n'
     +'Aqui é a equipe do Programa Coração de Herói (1ª Policlínica – Campinho).\n\n'
     +'Nas suas respostas ao nosso questionário, você contou que '+(atual?'fuma':'já fumou')+'. Por isso, queremos conversar com você sobre o rastreio de câncer de pulmão, um cuidado a mais com a sua saúde.\n\n'
     +'O rastreio é feito com uma tomografia de tórax de baixa dose: um exame rápido, sem contraste e com pouca radiação. Ele é indicado para quem tem de 50 a 80 anos e fumou bastante ao longo da vida, mesmo que já tenha parado, e ajuda a encontrar alterações bem no início, quando as chances de tratamento são muito maiores.\n\n'
-    +'Para sabermos se o exame é indicado para você, pode nos responder '+(atual?'3':'4')+' perguntas rápidas?\n'
-    +'1. Qual é a sua idade?\n'
-    +'2. Quantos cigarros você '+(atual?'fuma':'fumava')+' por dia, em média?\n'
-    +'3. Por quantos anos você fumou, no total?\n'
-    +(atual?'':'4. Há quantos anos você parou de fumar?\n')
-    +'\nCom as suas respostas, entramos em contato para combinar os próximos passos.'
+    +(faltam.length?'Para sabermos se o exame é indicado para você, pode nos responder '+(faltam.length===1?'uma pergunta rápida':faltam.length+' perguntas rápidas')+'?\n'
+      +faltam.map(function(p,i){return (faltam.length>1?(i+1)+'. ':'')+p+'\n';}).join('')
+      :'Pelas suas respostas, o exame é indicado para você. Queremos combinar o agendamento da tomografia: qual é o melhor dia e horário para falarmos?\n')
+    +(faltam.length?'\nCom as suas respostas, entramos em contato para combinar os próximos passos.':'')
     +(atual?' E, se você quiser ajuda para parar de fumar, também podemos ajudar: é só nos dizer.':'')+'\n\n'
     +(canal==='email'?'É só responder este e-mail.':'É só responder esta mensagem.')+'\n\nObrigado!\nPrograma Coração de Herói';
 }
@@ -1979,17 +2008,18 @@ function renderRastreio(){
     extras:[{key:'f',label:'Fumantes atuais',n:lista.filter(function(x){return x.tabagismo==='Fumante atual';}).length},{key:'e',label:'Ex-fumantes',n:lista.filter(function(x){return x.tabagismo==='Ex-fumante';}).length}]});
   const selSt=document.querySelector('#rastreioFilters select[data-rkey="status"]');
   if(selSt&&selSt.options.length===1)RASTREIO_STATUS.forEach(function(st){const o=document.createElement('option');o.textContent=st;selSt.appendChild(o);});
-  const ordem=function(x){return [RASTREIO_STATUS.indexOf(x.reg.status),x.triagem.cls==='nao'?1:0];};
+  const ordem=function(x){return [RASTREIO_STATUS.indexOf(x.reg.status),x.el.elegivel==='Não'?1:0];};
   const filtrados=lista.filter(function(x){return (RASTREIO_FILTRO.status==='todas'||x.reg.status===RASTREIO_FILTRO.status)&&(RASTREIO_FILTRO.tabaco==='todos'||x.tabagismo===RASTREIO_FILTRO.tabaco);})
     .sort(function(a,b){const oa=ordem(a),ob=ordem(b);return oa[1]-ob[1]||oa[0]-ob[0]||b.quando-a.quando;});
   const list=filtrados.slice(0,RASTREIO_FILTRO.n);
   const canais={whatsapp:'WhatsApp',email:'e-mail'};
   document.getElementById('rastreioRows').innerHTML=list.length?list.map(function(x){
-    const c=x.c,r=x.reg,el=elegRastreio(Object.assign({},r,{tabagismo:x.tabagismo}));
+    const c=x.c,r=x.ef,el=x.el;
     const nome=c?esc(tratamento(c)):'<span class="alerta">sem contato cadastrado</span>';
-    const fumo=esc(x.tabagismo)+(x.tempo?'<br><small>parou: '+esc(x.tempo.toLowerCase())+'</small>':'')+'<br><span class="el '+x.triagem.cls+'">'+esc(x.triagem.txt)+'</span>'+(x.divergente?'<br><small class="alerta">última resposta: '+esc(x.divergente)+'</small>':'');
+    const fumo=esc(x.tabagismo)+(x.faixa?'<br><small>parou há '+esc(x.faixa.txt)+'</small>':'')+'<br><span class="el '+x.triagem.cls+'">'+esc(x.triagem.txt)+'</span>'+(x.divergente?'<br><small class="alerta">última resposta: '+esc(x.divergente)+'</small>':'');
     let msg='—';
     if(c&&situacaoContato(c)==='suspenso')msg='<small>Desistência: envio suspenso</small>';
+    else if(c&&el.elegivel==='Não'&&String(x.reg.status)==='A contatar')msg='<small>Não indicado pelas respostas: sem mensagem de rastreio</small>';
     else if(c){
       const tel=String(c.Telefone_WhatsApp||'').replace(/\D/g,''),email=emailUnico(x.rg);
       const mWa=mensagemRastreio(c,x,'whatsapp'),mEm=mensagemRastreio(c,x,'email');
@@ -2003,20 +2033,20 @@ function renderRastreio(){
     const dados=[];
     if(r.idade!=='')dados.push(r.idade+' anos');
     if(el.macos!==null)dados.push(String(el.macos).replace('.',',')+' maços-ano');
-    if(x.tabagismo!=='Fumante atual'&&r.anos_sem_fumar!=='')dados.push('parou há '+r.anos_sem_fumar+' anos');
+    if(x.tabagismo!=='Fumante atual'&&String(r.anos_sem_fumar)!=='')dados.push('parou há '+r.anos_sem_fumar+' anos');
     const badge=el.elegivel==='Sim'?'<span class="el sim">indicado</span>':el.elegivel==='Não'?'<span class="el nao">não indicado</span>':'<span class="el inc">aguardando dados</span>';
-    const resp=(dados.length?esc(dados.join(' · '))+'<br>':'')+badge+(el.elegivel==='Não'?'<br><small>'+esc(el.motivo)+'</small>':'')+'<br><button type="button" class="btn-sm" data-rastreio-edit="'+esc(x.rg)+'">'+(RASTREIO_ABERTO===x.rg?'Fechar':'Registrar')+'</button>';
+    const resp=(dados.length?esc(dados.join(' · '))+'<br>':'')+(x.doQuest.length?'<small>do questionário</small><br>':'')+badge+(el.elegivel==='Não'?'<br><small>'+esc(el.motivo)+'</small>':'')+'<br><button type="button" class="btn-sm" data-rastreio-edit="'+esc(x.rg)+'">'+(RASTREIO_ABERTO===x.rg?'Fechar':'Registrar')+'</button>';
     const sel='<select class="status-sel rastreio-sel" aria-label="Situação do rastreio" data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'">'+RASTREIO_STATUS.map(function(s){return '<option'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';
     const conduta=condutaLungRads(r.lung_rads,r.data_tc);
     const tc=r.data_tc?fmtData(ymdToDate(r.data_tc))+(r.lung_rads?' · <span class="rads">Lung-RADS '+esc(r.lung_rads)+'</span>':'')+(conduta?'<br><small>'+esc(conduta)+'</small>':''):'—';
     let html='<tr><td>'+nome+'<br><small>RG '+esc(x.rg)+'</small></td><td>'+fumo+'</td><td>'+msg+'</td><td>'+resp+'</td><td>'+sel+'</td><td>'+tc+(r.observacao?'<br><small>'+esc(r.observacao)+'</small>':'')+'</td></tr>';
     if(RASTREIO_ABERTO===x.rg){
       const v=function(k){return esc(r[k]===undefined?'':r[k]);};
-      html+='<tr class="rastreio-edit"><td colspan="6"><form class="rastreio-form" data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'">'
+      html+='<tr class="rastreio-edit"><td colspan="6"><form class="rastreio-form" data-rg="'+esc(x.rg)+'" data-fumo="'+esc(x.tabagismo)+'" data-ate15="'+(x.faixa&&x.faixa.ate15!==null?String(x.faixa.ate15):'')+'">'
         +'<label>Idade<input type="number" min="18" max="110" name="idade" value="'+v('idade')+'"></label>'
         +'<label>Cigarros por dia<input type="number" min="0" max="200" step="1" name="cigarros_dia" value="'+v('cigarros_dia')+'"></label>'
         +'<label>Anos fumando<input type="number" min="0" max="90" step="1" name="anos_fumando" value="'+v('anos_fumando')+'"></label>'
-        +(x.tabagismo==='Fumante atual'?'':'<label>Anos sem fumar<input type="number" min="0" max="90" step="1" name="anos_sem_fumar" value="'+v('anos_sem_fumar')+'"></label>')
+        +(x.tabagismo==='Fumante atual'?'':'<label>Anos sem fumar<input type="number" min="0" max="90" step="1" name="anos_sem_fumar" value="'+v('anos_sem_fumar')+'"'+(x.faixa?' placeholder="questionário: '+esc(x.faixa.txt)+'"':'')+'></label>')
         +'<label>Data da TC<input type="date" name="data_tc" value="'+v('data_tc')+'"></label>'
         +'<label>Lung-RADS<select name="lung_rads">'+['','0','1','2','3','4A','4B','4X'].map(function(o){return '<option value="'+o+'"'+(o===r.lung_rads?' selected':'')+'>'+(o||'—')+'</option>';}).join('')+'</select></label>'
         +'<label style="grid-column:span 2">Observação<input type="text" maxlength="300" name="observacao" value="'+v('observacao')+'"></label>'
@@ -2028,9 +2058,10 @@ function renderRastreio(){
   const f=document.querySelector('#rastreioRows form.rastreio-form');if(f)previaRastreio(f);
   document.getElementById('rastreioNote').textContent='Mostrando '+list.length+' de '+filtrados.length+' militar(es). Passe o cursor sobre WhatsApp ou E-mail para ver a mensagem. Ao clicar, o contato é registrado e a situação passa a “Aguardando resposta”. Ao salvar as respostas, a indicação é calculada (USPSTF 2021) e a situação é sugerida; a conduta após a TC segue o Lung-RADS v2022 e é decisão médica.';
 }
+function ate15Form(f){return f.dataset.ate15==='true'?true:f.dataset.ate15==='false'?false:null;}
 function valoresForm(f){const o={};f.querySelectorAll('input[name],select[name]').forEach(function(i){o[i.name]=i.value.trim();});return o;}
 function previaRastreio(f){
-  const o=Object.assign(valoresForm(f),{tabagismo:f.dataset.fumo});const el=elegRastreio(o);
+  const o=Object.assign(valoresForm(f),{tabagismo:f.dataset.fumo,ate15:ate15Form(f)});const el=elegRastreio(o);
   f.querySelector('[data-preview]').innerHTML='Carga tabágica: <b>'+(el.macos===null?'—':String(el.macos).replace('.',',')+' maços-ano')+'</b> · '+(el.elegivel==='Sim'?'<span class="el sim">TC de baixa dose indicada</span>':el.elegivel==='Não'?'<span class="el nao">não indicada</span> <small>'+esc(el.motivo)+'</small>':'<span class="el inc">dados incompletos</span>')
     +(o.data_tc&&o.lung_rads?' · <small>'+esc(condutaLungRads(o.lung_rads,o.data_tc))+'</small>':'');
 }
@@ -2040,7 +2071,7 @@ document.addEventListener('submit',function(ev){
   ev.preventDefault();
   const o=valoresForm(f),rg=f.dataset.rg,atual=(CTRL.rastreio[rg]||{}).status||'A contatar';
   o.tabagismo=f.dataset.fumo;
-  const el=elegRastreio(o);
+  const el=elegRastreio(Object.assign({},o,{ate15:ate15Form(f)}));
   /* situação sugerida a partir das respostas e do exame (a equipe pode trocar depois) */
   let st=atual;
   if(o.data_tc&&o.lung_rads)st='TC realizada';
